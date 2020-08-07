@@ -1,1 +1,1 @@
-"# K-MESAR" 
+K-MESAR (K-Means with Simulated Annealing and Regularization) is an advanced clustering algorithm that uses soft computing idea, namely "Simulated Annealing", to help algorithm avoid local optimums in updating cluster centroids. Standard optimization objective is regularized in the process, preventing quick convergence and local optimums.
