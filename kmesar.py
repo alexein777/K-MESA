@@ -1,5 +1,6 @@
 import numpy as np
 import numpy.linalg as la
+import matplotlib.pyplot as plt
 
 
 def euclidean_distance(vec1, vec2):
@@ -16,7 +17,7 @@ def assign_points_to_centroids(points, centroids):
     """
     :param points: Points from training set to be clustered: numpy array of shape (m, n)
     :param centroids: Points representing cluster centroids: numpy array of shape (k, n)
-    :return labels: Array of centroid indices (i.e cluster labels) with respect to point indices:
+    :return: Array of centroid indices (i.e cluster labels) with respect to point indices:
     numpy array of shape (m, )
     """
 
@@ -31,42 +32,75 @@ def assign_points_to_centroids(points, centroids):
     return labels
 
 
+def extract_labeled_points(points, labels, k_label):
+    """
+    :param points: Points from training set to be clustered: numpy array of shape (m, n)
+    :param labels: Array of centroid indices (i.e cluster labels) with respect to point indices:
+    numpy array of shape (m, )
+    :param k_label: Specified cluster label (centroid index) for which we want to extract points: integer
+    :return: Points labeled as k_label: numpy array of shape (None, n)
+    """
+
+    indices = np.where(labels == k_label)
+
+    return points[indices]
+
+
 def update_centroids(points, centroids, labels):
     """
     :param points: Points from training set to be clustered: numpy array of shape (m, n)
-    :param centroids: Points representing (current) centroids: numpy array pf shape (k, n)
+    :param centroids: Points representing (current) cluster centroids: numpy array pf shape (k, n)
     :param labels: Array of (current) centroid indices (i.e cluster labels) with respect to point indices:
     numpy array of shape (m, )
-    :return:
+    :return: Updated centroids: numpy array of shape (k, n)
     """
 
+    k_cluster_labels = centroids.shape[0]
     new_centroids = np.zeros(centroids.shape)
-    unique_labels = np.unique(labels)
 
-    for unique_label in unique_labels:
-        indices = labels.index(unique_label)  # extracting indices of unique cluster label to get point indices
-        new_centroid = np.mean(points[indices])  # mean of points in cluster i
-        new_centroids[unique_label] = new_centroid
+    for k_label in range(k_cluster_labels):
+        points_with_k_label = extract_labeled_points(points, labels, k_label)  # extracting points with k label
+        new_centroid = np.mean(points_with_k_label, axis=0)  # mean of points in cluster k
+        new_centroids[k_label] = new_centroid  # updating current centroid with a new value
 
     return new_centroids
 
 
-# point = np.array([1, 2, 3])
-# centroids = np.array([
-#     [1, 2, 2],
-#     [0, 0.5, 1],
-#     [-1, 0, -1]
-# ])
-#
-# print(point - centroids)
-# print(la.norm(point - centroids, ord=2, axis=1))
-# print('-------------')
-#
-# points = np.array([point])
-# labels = assign_points_to_centroids(points, centroids)
-#
-# print(labels)
+def sum_of_squared_error(points, centroids, labels):
+    """
+    :param points:  Points from training set to be clustered: numpy array of shape (m, n)
+    :param centroids: Points representing cluster centroids: numpy array pf shape (k, n)
+    :return: Sum of squared error between cluster centroids and points assigned to those centroids: real number
+    """
 
-x = np.array([1, 0, 5, 6, 3, 2])
-indices = np.array([1, 3, 4])
-print(np.mean(x[indices]))
+    k_cluster_labels = centroids.shape[0]
+    sse = 0
+
+    for k_label in range(k_cluster_labels):
+        points_with_label_k = extract_labeled_points(points, labels, k_label)
+        sse += np.sum(np.power(points_with_label_k - centroids[k_label], 2))
+
+    return sse
+
+
+def initialize_centroids_random(points, k_centroids, lower_bound=None, upper_bound=None):
+    """
+    :param points: Points from training set to be clustered: numpy array of shape (m, n)
+    :param k_centroids: Number of centroids to be initialized: integer
+    :param lower_bound: Vector of minimum values across points dimensions: numpy array of shape (1, n)
+    :param upper_bound: Vector of maximum values across points dimensions: numpy array of shape (1, n)
+    :return: Initial centroids: numpy array of shape (k, n)
+    """
+
+    n = points.shape[1]
+    centroids = np.zeros((k_centroids, n))
+
+    if lower_bound is None or upper_bound is None:
+        for k in range(k_centroids):
+            centroids[k] = np.random.random_sample((n,))
+    elif lower_bound is not None and upper_bound is not None:
+        for k in range(k_centroids):
+            centroids[k] = lower_bound + np.random.random_sample((n,)) * (upper_bound - lower_bound)
+
+    return centroids
+
