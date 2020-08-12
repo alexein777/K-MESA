@@ -128,6 +128,8 @@ def check_centroids_update(old_centroids, new_centroids, tol, norm='euclidean'):
     :param old_centroids: Cluster centroids from previous iteration: numpy array of shape (k, n)
     :param new_centroids: Cluster centroids from current iteration: numpy array of shape (k, n)
     :param tol: Tolerance parameter: real number
+    :param norm: How distance is calculated between points: string
+    Possible values: 'euclidean', 'frob'
     :return: K-Means stopping criterion: boolean
     """
 
@@ -152,15 +154,12 @@ def annealing_probability(it, annealing_function_prob, alpha=1):
     :return: Probability of acceptance the neighbouring solution (e.g moving of centroid in the specified direction)
     """
 
-    if it == 0:
-        it += 1
-
     if annealing_function_prob == 'exp':
         return np.exp(-it / alpha)
     elif annealing_function_prob == 'log':
         return LN2 / np.log(alpha + it)
     elif annealing_function_prob == 'sq':
-        return np.min((alpha + it) / it ** 2, 1)
+        return np.min([(alpha + it) / (it ** 2), 1])
     elif annealing_function_prob == 'sqrt':
         return alpha / np.sqrt(it)
     elif annealing_function_prob == 'sigmoid':
@@ -177,9 +176,11 @@ def calculate_annealing_vector(points,
                                bounds=None,
                                annealing_method='random',
                                annealing_vector_function='log',
-                               beta=1):
+                               beta=1
+                               ):
     """
     :param points: Points from the training set to be clustered: numpy array of shape (m, n)
+    Note: Some annealing methods will require entire training set to evaluate annealing vector
     :param labels: Current centroid indices (i.e cluster labels) with respect to point indices:
     numpy array of shape (m, )
     :param centroid: Centroid for which annealing vector is calculated: numpy array of shape (n, )
@@ -188,9 +189,8 @@ def calculate_annealing_vector(points,
     :param it: Current iteration of the algorithm: integer
     :param bounds: Lower and upper bounds (min and max) of the training set (points). If None, they are calculated,
     else unpacked from a tuple.
-    Note: Some annealing methods will require entire training set to evaluate annealing vector
     :param annealing_method: Specifies how the centroids are annealed (i.e moved from their current position): string
-    Possible values: 'random', 'min', 'max'
+    Possible values: 'random', 'min', 'max', 'maxmin'
     :param annealing_vector_function: Decreasing function between 0 and 1 that handles the intensity by which will
     annealing vector pull the centroid in the specified direction: string
     Possible values: 'exp', 'log', 'sq', 'sqrt', 'sigmoid', 'fixed' - in this case function is ignored and only
@@ -215,15 +215,28 @@ def calculate_annealing_vector(points,
     elif annealing_method == 'min':
         # Directional point is point from cluster label_j with the lowest distance from current centroid
         points_with_label_j = extract_labeled_points(points, labels, label_j)
-        distances = la.norm(centroid, points_with_label_j, ord=2)
+        distances = la.norm(centroid - points_with_label_j, ord=2, axis=1)
         min_index = np.argmin(distances)
         direction_point = points_with_label_j[min_index]
     elif annealing_method == 'max':
         # Direction point is point from cluster label_j with the highest distance from current centroid
         points_with_label_j = extract_labeled_points(points, labels, label_j)
-        distances = la.norm(centroid, points_with_label_j, ord=2)
+        distances = la.norm(centroid - points_with_label_j, ord=2, axis=1)
         max_index = np.argmax(distances)
         direction_point = points_with_label_j[max_index]
+    elif annealing_method == 'maxmin':
+        # Directional point is point from cluster label_j with the lowest/highest distance from current centroid,
+        # depending on parity of current iteration it
+        points_with_label_j = extract_labeled_points(points, labels, label_j)
+        distances = la.norm(centroid - points_with_label_j, ord=2, axis=1)
+
+        # On first iteration (it=1) max annealing is applied, and every other odd iteration
+        if it % 2 != 0:
+            index = np.argmax(distances)
+        else:
+            index = np.argmin(distances)
+
+        direction_point = points_with_label_j[index]
 
     # Annealing vector is weighted with respect to annealing_vector_function
     if annealing_vector_function == 'fixed':
@@ -235,7 +248,11 @@ def calculate_annealing_vector(points,
         w = annealing_probability(it, annealing_vector_function, beta)
         annealing_vector = w * (direction_point - centroid)
 
-    return annealing_vector
+        # In case of 'min' annealing, centroids 'jumps' over directional point by the distance + w% of that distance
+        if annealing_method == 'min' or (annealing_method == 'maxmin' and it % 2 == 0):
+            annealing_vector += (direction_point - centroid)
+
+    return annealing_vector, direction_point
 
 
 def anneal_centroids(points,
@@ -243,11 +260,11 @@ def anneal_centroids(points,
                      labels,
                      it,
                      bounds=None,
-                     annealing_function_prob='log',
+                     annealing_function_prob='sqrt',
                      alpha=1,
-                     annealing_method='random',
-                     annealing_vector_function='sqrt',
-                     beta=1
+                     annealing_method='max',
+                     annealing_vector_function='log',
+                     beta=1.2
                      ):
     """
     :param points: Points from the training set to be clustered: numpy array of shape (m, n)
@@ -272,6 +289,7 @@ def anneal_centroids(points,
     k = centroids.shape[0]
     annealed_centroids = copy.deepcopy(centroids)
     p = annealing_probability(it, annealing_function_prob=annealing_function_prob, alpha=alpha)
+    n_annealings = 0
 
     for i in range(k):
         q = np.random.uniform(0, 1)
@@ -288,27 +306,30 @@ def anneal_centroids(points,
                                                           beta=beta
                                                           )
             annealed_centroids[i] += annealing_vector
+            n_annealings += 1
 
-    return annealed_centroids
+    return annealed_centroids, n_annealings
 
 
 class KMESAR:
     def __init__(self,
                  k_clusters=5,
                  init='random',
+                 init_centroids=None,
                  n_init=10,
                  max_iter=300,
                  tol=1e-4,
                  simulated_annealing_on=True,
-                 annealing_function_prob='log',
+                 annealing_function_prob='sqrt',
                  alpha=1,
-                 annealing_method='random',
-                 annealing_vector_function='sqrt',
+                 annealing_method='max',
+                 annealing_vector_function='log',
                  beta=1
                  ):
 
         self.k_clusters = k_clusters
         self.init = init
+        self.init_centroids = init_centroids
         self.n_init = n_init
         self.max_iter = max_iter
         self.tol = tol
@@ -321,8 +342,9 @@ class KMESAR:
 
         self.labels_ = None
         self.centroids_ = None
-        self.intertia_ = None
+        self.inertia_ = None
         self.n_iter_ = None
+        self.n_annealings_ = None
         self.history_ = None
 
     def fit(self, points):
@@ -339,25 +361,31 @@ class KMESAR:
             points = np.array(points)
 
         for n_it in range(self.n_init):
-            initial_centroids = initialize_centroids_random(points, self.k_clusters, lower_bound, upper_bound)
+            if self.init_centroids is not None:
+                initial_centroids = self.init_centroids
+            else:
+                initial_centroids = initialize_centroids_random(points, self.k_clusters, lower_bound, upper_bound)
+
             centroids = initial_centroids
+            total_annealings = 0
 
             for it in range(self.max_iter):
                 labels = assign_points_to_centroids(points, centroids)
                 new_centroids = update_centroids(points, centroids, labels)
 
                 if self.simulated_annealing_on:
-                    new_centroids = anneal_centroids(points,
-                                                     new_centroids,
-                                                     labels,
-                                                     it,
-                                                     bounds=(lower_bound, upper_bound),
-                                                     annealing_function_prob=self.annealing_function_prob,
-                                                     alpha=self.alpha,
-                                                     annealing_method=self.annealing_method,
-                                                     annealing_vector_function=self.annealing_vector_function,
-                                                     beta=self.beta
-                                                     )
+                    new_centroids, n_annealings = anneal_centroids(points,
+                                                                   new_centroids,
+                                                                   labels,
+                                                                   it,
+                                                                   bounds=(lower_bound, upper_bound),
+                                                                   annealing_function_prob=self.annealing_function_prob,
+                                                                   alpha=self.alpha,
+                                                                   annealing_method=self.annealing_method,
+                                                                   annealing_vector_function=self.annealing_vector_function,
+                                                                   beta=self.beta
+                                                                   )
+                    total_annealings += n_annealings
 
                 stopping_criterion_reached = check_centroids_update(centroids, new_centroids, self.tol)
                 centroids = new_centroids
@@ -369,6 +397,7 @@ class KMESAR:
             history['centroids'].append(centroids)
             history['inertia'].append(sum_of_squared_error(points, centroids, labels))
             history['n_iter'].append(it)
+            history['n_annealings'].append(total_annealings)
 
         best_result_index = np.argmin(history['inertia'])
         self.history_ = history
@@ -376,3 +405,4 @@ class KMESAR:
         self.centroids_ = history['centroids'][best_result_index]
         self.inertia_ = history['inertia'][best_result_index]
         self.n_iter_ = history['n_iter'][best_result_index]
+        self.n_annealings_ = history['n_annealings'][best_result_index]
