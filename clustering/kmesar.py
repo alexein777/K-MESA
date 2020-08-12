@@ -2,6 +2,7 @@ import numpy as np
 import numpy.linalg as la
 import pandas as pd
 import copy
+import matplotlib.pyplot as plt
 
 LN2 = np.log(2)
 
@@ -295,16 +296,16 @@ def anneal_centroids(points,
         q = np.random.uniform(0, 1)
 
         if p > q:
-            annealing_vector = calculate_annealing_vector(points,
-                                                          labels,
-                                                          centroids[i],
-                                                          i,
-                                                          it,
-                                                          bounds=bounds,
-                                                          annealing_method=annealing_method,
-                                                          annealing_vector_function=annealing_vector_function,
-                                                          beta=beta
-                                                          )
+            annealing_vector, _ = calculate_annealing_vector(points,
+                                                             labels,
+                                                             centroids[i],
+                                                             i,
+                                                             it,
+                                                             bounds=bounds,
+                                                             annealing_method=annealing_method,
+                                                             annealing_vector_function=annealing_vector_function,
+                                                             beta=beta
+                                                             )
             annealed_centroids[i] += annealing_vector
             n_annealings += 1
 
@@ -324,7 +325,8 @@ class KMESAR:
                  alpha=1,
                  annealing_method='max',
                  annealing_vector_function='log',
-                 beta=1
+                 beta=1,
+                 convergence_tracking=False
                  ):
 
         self.k_clusters = k_clusters
@@ -339,13 +341,15 @@ class KMESAR:
         self.annealing_method = annealing_method
         self.annealing_vector_function = annealing_vector_function
         self.beta = beta
+        self.convergence_tracking = convergence_tracking
 
         self.labels_ = None
         self.centroids_ = None
         self.inertia_ = None
         self.n_iter_ = None
-        self.n_annealings_ = None
+        self.total_annealings_ = None
         self.history_ = None
+        self.tracking_history_ = None
 
     def fit(self, points):
         lower_bound = np.min(points, axis=0)
@@ -354,8 +358,12 @@ class KMESAR:
             'labels': [],
             'centroids': [],
             'inertia': [],
-            'n_iter': []
+            'n_iter': [],
+            'total_annealings': []
         }
+
+        if self.convergence_tracking:
+            tracking_history = []
 
         if type(points) == pd.DataFrame:
             points = np.array(points)
@@ -369,15 +377,26 @@ class KMESAR:
             centroids = initial_centroids
             total_annealings = 0
 
+            if self.convergence_tracking:
+                tracking_history.append({})
+                tracking_history[n_it]['centroids'] = [initial_centroids]
+                tracking_history[n_it]['labels'] = []
+                tracking_history[n_it]['n_iter'] = 0
+                tracking_history[n_it]['n_annealings'] = []
+
             for it in range(self.max_iter):
                 labels = assign_points_to_centroids(points, centroids)
+
+                if self.convergence_tracking:
+                    tracking_history[n_it]['labels'].append(labels)
+
                 new_centroids = update_centroids(points, centroids, labels)
 
                 if self.simulated_annealing_on:
                     new_centroids, n_annealings = anneal_centroids(points,
                                                                    new_centroids,
                                                                    labels,
-                                                                   it,
+                                                                   it + 1,
                                                                    bounds=(lower_bound, upper_bound),
                                                                    annealing_function_prob=self.annealing_function_prob,
                                                                    alpha=self.alpha,
@@ -387,22 +406,77 @@ class KMESAR:
                                                                    )
                     total_annealings += n_annealings
 
+                    if self.convergence_tracking:
+                        tracking_history[n_it]['centroids'].append(new_centroids)
+                        tracking_history[n_it]['n_annealings'].append(n_annealings)
+
                 stopping_criterion_reached = check_centroids_update(centroids, new_centroids, self.tol)
                 centroids = new_centroids
 
-                if stopping_criterion_reached:
+                if stopping_criterion_reached or it + 1 == self.max_iter:
+                    labels = assign_points_to_centroids(points, centroids)
+
+                    if self.convergence_tracking:
+                        tracking_history[n_it]['labels'].append(labels)
+                        tracking_history[n_it]['n_iter'] = it
+
                     break
 
             history['labels'].append(labels)
             history['centroids'].append(centroids)
             history['inertia'].append(sum_of_squared_error(points, centroids, labels))
             history['n_iter'].append(it)
-            history['n_annealings'].append(total_annealings)
+            history['total_annealings'].append(total_annealings)
 
         best_result_index = np.argmin(history['inertia'])
+
         self.history_ = history
         self.labels_ = history['labels'][best_result_index]
         self.centroids_ = history['centroids'][best_result_index]
         self.inertia_ = history['inertia'][best_result_index]
         self.n_iter_ = history['n_iter'][best_result_index]
-        self.n_annealings_ = history['n_annealings'][best_result_index]
+        self.total_annealings_ = history['total_annealings'][best_result_index]
+
+        if self.convergence_tracking:
+            self.tracking_history_ = tracking_history
+
+    def plot_tracking_history(self, points):
+        if self.labels_ is None:
+            print('No tracking histories present. Run algorithm before tracking convergence.')
+            return
+
+        colors = ['red', 'green', 'blue', 'yellow', 'brown', 'm', 'orange', 'cyan', 'plum', 'teal', 'orange', 'pink',
+                  'lime', 'gold', 'lightcoral', 'cornflowerblue', 'darkslateblue', 'orchid', 'slategray', 'peru']
+
+        # Proveriti iscrtavanje
+        for n_it in range(self.n_init):
+            n_iter = self.tracking_history_[n_it]['n_iter']
+
+            n_rows = n_iter // 2 if n_iter % 2 == 0 else n_iter // 2 + 1
+            n_cols = 2
+
+            fig = plt.figure(figsize=(10, 2 * n_iter))
+            subplot_ind = 1
+
+            for i in range(n_iter):
+                centroids = self.tracking_history_[n_it]['centroids'][i]
+                labels = self.tracking_history_[n_it]['labels'][i]
+
+                ax = fig.add_subplot(n_rows, n_cols, subplot_ind)
+
+                for cluster_label in range(self.k_clusters):
+                    indices = np.where(labels == cluster_label)
+                    cluster_subsample = points[indices]
+
+                    ax.scatter(cluster_subsample[:, 0], cluster_subsample[:, 1],
+                               c=colors[cluster_label], s=10, label=f'Cluster {cluster_label}')
+
+                ax.scatter(centroids[:, 0], centroids[:, 1], c='black', s=60, marker='x', label='Centroids')
+
+                ax.legend(loc='upper right', prop={'size': 6})
+                ax.set_title(f'KMESAR: iteration={i}')
+
+                subplot_ind += 1
+
+            fig.savefig(f'KMESAR_tracking_n_it={n_it}')
+            plt.show()
