@@ -1,15 +1,8 @@
 import numpy as np
+import matplotlib.pyplot as plt
+
 
 def load_dataset_3_clusters_separate(c1_size=25, c2_size=25, c3_size=50):
-    # c1: x -> [-1.5, -0.5],  y -> [-0.5, 0.5]
-    # c2: x -> [0.5, 1.5],    y -> [-0.5, 0.5]
-    # c3: x -> [-0.6, 1.2],   y -> [1, 3]
-
-    # return np.array([
-    #     [-0.4, 3], [0.4, 3], [0.1, 2.6], [0.15, 2.61], [0.35, 2.5], [0.39, 2.54],
-    #     [-0.2, 2.5], [-0.5, 2.45], []
-    # ])
-
     np.random.seed(7)
 
     c1_lower = np.array([[-1.5, -0.5]])
@@ -34,3 +27,83 @@ def load_dataset_3_clusters_separate(c1_size=25, c2_size=25, c3_size=50):
     p3[correction_indices, 0] -= 0.6
 
     return np.concatenate([p1, p2, p3, p3_addition, noise])
+
+
+def plot_prob_function(prob_function, alpha, n_iter=15, color='blue'):
+    x = np.arange(1, n_iter + 1, dtype=np.int16)
+
+    if prob_function == 'exp':
+        y = np.exp((-x + 1)/ alpha)
+        legend = r'$f(it) = e^{\frac{-it}{\alpha}}$'
+    elif prob_function == 'log':
+        y = np.log(2) / np.log(alpha + x)
+        legend = r'$f(it) = \frac{ln2}{ln(it + \alpha)}$'
+    elif prob_function == 'sq':
+        ones = np.zeros(x.shape[0]) + 1
+        y = np.min([(alpha + x) / (x ** 2), ones], axis=0)
+        legend = r'$f(it) = min(\frac{\alpha + it}{it^2}, 1)$'
+    elif prob_function == 'sqrt':
+        y = alpha / np.sqrt(x)
+        legend = r'$f(it) = \frac{\alpha}{\sqrt{it}}$'
+    elif prob_function == 'sigmoid':
+        y = 1 / (1 + (x - 1) / (alpha + np.exp(-x)))
+        legend = r'$f(it) = \frac{1}{1 + \frac{it - 1}{\alpha + e^{-x}}}$'
+    elif prob_function == 'recip':
+        y = (1 + alpha) / (x + alpha)
+        legend = r'$f(it) = \frac{1 + \alpha}{it + \alpha}$'
+    else:
+        raise ValueError(f'Unknown probability function: {prob_function}')
+
+    fig, ax = plt.subplots(figsize=(5, 5))
+
+    ax.plot(x, y, c=color)
+    ax.set_xlim(0, n_iter + 1)
+    ax.set_ylim(0, 1.1)
+    ax.set_xlabel('iteration')
+    ax.set_ylabel('probability')
+
+    alpha_title = r'$\alpha = $' + f'{alpha}'
+    ax.set_title(f'Annealing probability function, ' + alpha_title)
+    ax.legend([legend], prop={'size': 20})
+
+    plt.show()
+
+
+def plot_all_annealing_prob_functions(n_iter=15, alpha=1):
+    n_func = 6
+    fig = plt.figure(figsize=(8, 8))
+
+    x = np.arange(1, n_iter + 1)
+    y_exp = np.exp((-x + 1)/ alpha)
+    y_log = np.log(2) / np.log(alpha + x)
+    y_sq = np.min([(alpha + x) / (x ** 2), np.zeros(x.shape[0]) + 1], axis=0)
+    y_sqrt = alpha / np.sqrt(x)
+    y_sigmoid = 1 / (1 + (x - 1) / (alpha + np.exp(-x)))
+    y_recip = (1 + alpha) / (x + alpha)
+    y = np.array([y_exp, y_log, y_sq, y_sqrt, y_sigmoid, y_recip])
+
+    labels = [
+        r'$f(it) = e^{\frac{-it}{\alpha}}$',
+        r'$f(it) = \frac{ln2}{ln(it + \alpha)}$',
+        r'$f(it) = min(\frac{\alpha + it}{it^2}, 1)$',
+        r'$f(it) = \frac{\alpha}{\sqrt{it}}$',
+        r'$f(it) = \frac{1}{1 + \frac{it - 1}{\alpha + e^{-it}}}$',
+        r'$f(it) = \frac{1 + \alpha}{it + \alpha}$'
+    ]
+
+    colors = ['blue', 'green', 'red', 'yellow', 'cyan', 'm']
+    for i in range(n_func):
+        plt.plot(x, y[i], c=colors[i], label=labels[i])
+
+    plt.xlim(0, n_iter + 1)
+    plt.ylim(0, 1.1)
+    plt.xlabel('iteration', fontsize=14)
+    plt.ylabel('probability', fontsize=14)
+
+    alpha_title = r'$\alpha = $' + f'{alpha}'
+    plt.title('Decreasing probability functions, ' + alpha_title, fontsize=16)
+    plt.legend(loc='upper right', prop={'size': 20})
+
+    plt.show()
+
+    fig.savefig('annealing_prob_functions')
