@@ -77,7 +77,7 @@ def plot_all_annealing_prob_functions(n_iter=15, alpha=1):
     y_exp = np.exp((-x + 1)/ alpha)
     y_log = np.log(2) / np.log(alpha + x)
     y_sq = np.min([(alpha + x) / (x ** 2), np.zeros(x.shape[0]) + 1], axis=0)
-    y_sqrt = alpha / np.sqrt(x)
+    y_sqrt = alpha / (np.sqrt(x - 1) + alpha)
     y_sigmoid = 1 / (1 + (x - 1) / (alpha + np.exp(-x)))
     y_recip = (1 + alpha) / (x + alpha)
     y = np.array([y_exp, y_log, y_sq, y_sqrt, y_sigmoid, y_recip])
@@ -86,7 +86,7 @@ def plot_all_annealing_prob_functions(n_iter=15, alpha=1):
         r'$f(it) = e^{\frac{-it}{\alpha}}$',
         r'$f(it) = \frac{ln2}{ln(it + \alpha)}$',
         r'$f(it) = min(\frac{\alpha + it}{it^2}, 1)$',
-        r'$f(it) = \frac{\alpha}{\sqrt{it}}$',
+        r'$f(it) = \frac{\alpha}{\sqrt{it - 1} + \alpha}$',
         r'$f(it) = \frac{1}{1 + \frac{it - 1}{\alpha + e^{-it}}}$',
         r'$f(it) = \frac{1 + \alpha}{it + \alpha}$'
     ]
@@ -106,4 +106,4 @@ def plot_all_annealing_prob_functions(n_iter=15, alpha=1):
 
     plt.show()
 
-    fig.savefig('annealing_prob_functions')
+    fig.savefig(f'annealing_prob_functions_alpha={alpha}')
