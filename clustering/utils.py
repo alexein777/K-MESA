@@ -3,6 +3,13 @@ import matplotlib.pyplot as plt
 
 
 def load_dataset_3_clusters_separate(c1_size=25, c2_size=25, c3_size=50):
+    """
+    :param c1_size: Number of points in cluster 1: integer
+    :param c2_size: Number of points in cluster 2: integer
+    :param c3_size: Number of points in cluster 3: integer
+    :return: Dataset of points with 3 clusters
+    """
+
     np.random.seed(7)
 
     c1_lower = np.array([[-1.5, -0.5]])
@@ -30,27 +37,39 @@ def load_dataset_3_clusters_separate(c1_size=25, c2_size=25, c3_size=50):
 
 
 def plot_prob_function(prob_function, alpha, n_iter=15, color='blue'):
+    """
+    :param prob_function: Type of function to be plotted: string
+    Possible values: 'exp', 'log', 'sq', 'sqrt', 'sigmoid', 'recip', 'flex'
+    :param alpha: Hyperparameter: float
+    :param n_iter: Number of iterations on x-axis
+    :param color: Plot color: string
+    :return: None
+    """
+
     x = np.arange(1, n_iter + 1, dtype=np.int16)
 
     if prob_function == 'exp':
         y = np.exp((-x + 1)/ alpha)
         legend = r'$f(it) = e^{\frac{-it}{\alpha}}$'
     elif prob_function == 'log':
-        y = np.log(2) / np.log(alpha + x)
-        legend = r'$f(it) = \frac{ln2}{ln(it + \alpha)}$'
+        y = np.log(1 + alpha) / np.log(x + alpha)
+        legend = r'$f(it) = \frac{ln(1 + \alpha)}{ln(it + \alpha)}$'
     elif prob_function == 'sq':
         ones = np.zeros(x.shape[0]) + 1
         y = np.min([(alpha + x) / (x ** 2), ones], axis=0)
         legend = r'$f(it) = min(\frac{\alpha + it}{it^2}, 1)$'
     elif prob_function == 'sqrt':
         y = alpha / np.sqrt(x)
-        legend = r'$f(it) = \frac{\alpha}{\sqrt{it}}$'
+        legend = r'$f(it) = \frac{\alpha}{\sqrt{it - 1} + \alpha}$'
     elif prob_function == 'sigmoid':
         y = 1 / (1 + (x - 1) / (alpha + np.exp(-x)))
-        legend = r'$f(it) = \frac{1}{1 + \frac{it - 1}{\alpha + e^{-x}}}$'
+        legend = r'$f(it) = \frac{1}{1 + \frac{it - 1}{\alpha + e^{-it}}}$'
     elif prob_function == 'recip':
         y = (1 + alpha) / (x + alpha)
         legend = r'$f(it) = \frac{1 + \alpha}{it + \alpha}$'
+    elif prob_function == 'flex':
+        y = 1 / (x ** alpha)
+        legend = r'$f(it) = \frac{1}{it^{\alpha}}$'
     else:
         raise ValueError(f'Unknown probability function: {prob_function}')
 
@@ -69,29 +88,37 @@ def plot_prob_function(prob_function, alpha, n_iter=15, color='blue'):
     plt.show()
 
 
-def plot_all_annealing_prob_functions(n_iter=15, alpha=1):
-    n_func = 6
+def plot_all_annealing_prob_functions(n_iter=20, alpha=1):
+    """
+    :param n_iter: Number of iterations on x-axis: integer
+    :param alpha: Hyperparameter: float
+    :return: None
+    """
+
+    n_func = 7
     fig = plt.figure(figsize=(8, 8))
 
     x = np.arange(1, n_iter + 1)
-    y_exp = np.exp((-x + 1)/ alpha)
-    y_log = np.log(2) / np.log(alpha + x)
+    y_exp = np.exp((-x + 1) / alpha)
+    y_log = np.log(1 + alpha) / np.log(x + alpha)
     y_sq = np.min([(alpha + x) / (x ** 2), np.zeros(x.shape[0]) + 1], axis=0)
     y_sqrt = alpha / (np.sqrt(x - 1) + alpha)
     y_sigmoid = 1 / (1 + (x - 1) / (alpha + np.exp(-x)))
     y_recip = (1 + alpha) / (x + alpha)
-    y = np.array([y_exp, y_log, y_sq, y_sqrt, y_sigmoid, y_recip])
+    y_flex = 1 / (np.power(x, alpha))
+    y = np.array([y_exp, y_log, y_sq, y_sqrt, y_sigmoid, y_recip, y_flex])
 
     labels = [
         r'$f(it) = e^{\frac{-it}{\alpha}}$',
-        r'$f(it) = \frac{ln2}{ln(it + \alpha)}$',
+        r'$f(it) = \frac{ln(1 + \alpha)}{ln(it + \alpha)}$',
         r'$f(it) = min(\frac{\alpha + it}{it^2}, 1)$',
         r'$f(it) = \frac{\alpha}{\sqrt{it - 1} + \alpha}$',
         r'$f(it) = \frac{1}{1 + \frac{it - 1}{\alpha + e^{-it}}}$',
-        r'$f(it) = \frac{1 + \alpha}{it + \alpha}$'
+        r'$f(it) = \frac{1 + \alpha}{it + \alpha}$',
+        r'$f(it) = \frac{1}{it^{\alpha}}$'
     ]
 
-    colors = ['blue', 'green', 'red', 'yellow', 'cyan', 'm']
+    colors = ['blue', 'green', 'red', 'yellow', 'cyan', 'm', 'darkorange', 'teal', 'lightcoral', 'crimson', 'plum']
     for i in range(n_func):
         plt.plot(x, y[i], c=colors[i], label=labels[i])
 
@@ -106,4 +133,42 @@ def plot_all_annealing_prob_functions(n_iter=15, alpha=1):
 
     plt.show()
 
-    fig.savefig(f'annealing_prob_functions_alpha={alpha}')
+    fig.savefig(f'annealing_prob_functions_alpha={alpha}.png')
+
+
+def time_elapsed(start_ns, end_ns):
+    """
+    :param start_ns: Timestamp before procedure start in nanoseconds
+    :param end_ns: Timestamp after procedure end in nanoseconds
+    :return: Time elapsed during procedure run: formated string
+    """
+
+    milisec = int(round((end_ns - start_ns) / 1000000))
+    secs = 0
+    mins = 0
+    hours = 0
+
+    while milisec >= 1000:
+        milisec -= 1000
+        secs += 1
+
+    while secs >= 60:
+        secs -= 60
+        mins += 1
+
+    while mins >= 60:
+        mins -= 60
+        hours += 1
+
+    if hours > 0:
+        time_string = f'{hours}h {mins}min {secs}s'
+    elif mins > 0:
+        time_string = f'{mins}min {secs}s'
+    elif secs > 0:
+        time_string = f'{secs}s {milisec}ms'
+    else:
+        time_string = f'{milisec}ms'
+
+    return time_string
+
+

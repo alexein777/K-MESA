@@ -3,6 +3,8 @@ import numpy.linalg as la
 import pandas as pd
 import copy
 import matplotlib.pyplot as plt
+import time
+from clustering.utils import time_elapsed
 
 LN2 = np.log(2)
 
@@ -150,7 +152,7 @@ def annealing_probability(it, annealing_prob_function, alpha=1):
     """
     :param it: Current iteration of the algorithm: integer
     :param annealing_prob_function: Decreasing function between 0 and 1 representing annealing probabilty: string
-    Possible values: 'exp', 'log', 'sq', 'sqrt', 'sigmoid', 'recip'
+    Possible values: 'exp', 'log', 'sq', 'sqrt', 'sigmoid', 'recip', 'flex'
     :param alpha: Tunning parameter for annealing probability function: real number
     :return: Probability of acceptance the neighbouring solution (e.g moving of centroid in the specified direction)
     """
@@ -158,7 +160,7 @@ def annealing_probability(it, annealing_prob_function, alpha=1):
     if annealing_prob_function == 'exp':
         return np.exp((-it + 1) / alpha)  # +1 when it=1 => 0
     elif annealing_prob_function == 'log':
-        return LN2 / np.log(alpha + it)
+        return np.log(1 + alpha) / np.log(it + alpha)
     elif annealing_prob_function == 'sq':
         return np.min([(alpha + it) / (it ** 2), 1])
     elif annealing_prob_function == 'sqrt':
@@ -167,6 +169,8 @@ def annealing_probability(it, annealing_prob_function, alpha=1):
         return 1 / (1 + (it - 1) / (alpha + np.exp(-it)))
     elif annealing_prob_function == 'recip':
         return (1 + alpha) / (it + alpha)
+    elif annealing_prob_function == 'flex':
+        return 1 / (it ** alpha)
     else:
         raise ValueError(f'Unknown annealing probability function: {annealing_prob_function}')
 
@@ -252,50 +256,82 @@ def calculate_annealing_vector(points,
     elif annealing_method == 'min':
         # Direction point is point from cluster label_j with the lowest distance from current centroid
         points_with_label_j = extract_labeled_points(points, labels, label_j)
-        distances = la.norm(centroid - points_with_label_j, ord=2, axis=1)
-        min_index = np.argmin(distances)
-        direction_point = points_with_label_j[min_index]
+
+        # Anomaly: if there are no points in this cluster, ignore annealing step
+        if points_with_label_j.shape[0] == 0:
+            direction_point = centroid
+        else:
+            distances = la.norm(centroid - points_with_label_j, ord=2, axis=1)
+            min_index = np.argmin(distances)
+            direction_point = points_with_label_j[min_index]
     elif annealing_method == 'max':
         # Direction point is point from cluster label_j with the highest distance from current centroid
         points_with_label_j = extract_labeled_points(points, labels, label_j)
-        distances = la.norm(centroid - points_with_label_j, ord=2, axis=1)
-        max_index = np.argmax(distances)
-        direction_point = points_with_label_j[max_index]
+
+        # Anomaly: if there are no points in this cluster, ignore annealing step
+        if points_with_label_j.shape[0] == 0:
+            direction_point = centroid
+        else:
+            distances = la.norm(centroid - points_with_label_j, ord=2, axis=1)
+            max_index = np.argmax(distances)
+            direction_point = points_with_label_j[max_index]
     elif annealing_method == 'maxmin':
         # Direction point is point from cluster label_j with the lowest/highest distance from current centroid,
         # depending on parity of current iteration it
         points_with_label_j = extract_labeled_points(points, labels, label_j)
-        distances = la.norm(centroid - points_with_label_j, ord=2, axis=1)
 
-        # On first iteration (it=1) max annealing is applied, and every other odd iteration
-        if it % 2 != 0:
-            index = np.argmax(distances)
+        # Anomaly: if there are no points in this cluster, ignore annealing step
+        if points_with_label_j.shape[0] == 0:
+            direction_point = centroid
         else:
-            index = np.argmin(distances)
+            distances = la.norm(centroid - points_with_label_j, ord=2, axis=1)
 
-        direction_point = points_with_label_j[index]
+            # On first iteration (it=1) max annealing is applied, and every other odd iteration
+            if it % 2 != 0:
+                index = np.argmax(distances)
+            else:
+                index = np.argmin(distances)
+
+            direction_point = points_with_label_j[index]
     elif annealing_method == 'cluster_own':
         # Direction point is random point from centroid's own cluster
         points_with_label_j = extract_labeled_points(points, labels, label_j)
-        rand_index = np.random.randint(0, points_with_label_j.shape[0])
-        direction_point = points_with_label_j[rand_index]
+
+        # Anomaly: if there are no points in this cluster, ignore annealing step
+        if points_with_label_j.shape[0] == 0:
+            direction_point = centroid
+        else:
+            rand_index = np.random.randint(0, points_with_label_j.shape[0])
+            direction_point = points_with_label_j[rand_index]
     elif annealing_method == 'cluster_other':
         # Direction point is random point from some other cluster different from centroid's corresponding points
         labels_without_j = labels[np.where(labels != label_j)]
-        rand_label = np.squeeze(np.random.choice(labels_without_j, size=1))
+
+        # Fixing anomaly case where there are no labels other than label_j
+        if labels_without_j.shape[0] == 0:
+            # Take point from any cluster
+            rand_label = np.random.randint(0, np.unique(labels).shape[0])
+        else:
+            rand_label = np.squeeze(np.random.choice(labels_without_j, size=1))
+
         points_with_rand_label = extract_labeled_points(points, labels, rand_label)
-        rand_index = np.random.randint(0, points_with_rand_label.shape[0])
-        direction_point = points_with_rand_label[rand_index]
+
+        # Anomaly: if there are no points in this cluster, ignore annealing step
+        if points_with_rand_label.shape[0] == 0:
+            direction_point = centroid
+        else:
+            rand_index = np.random.randint(0, points_with_rand_label.shape[0])
+            direction_point = points_with_rand_label[rand_index]
     elif annealing_method == 'cluster_mean':
         # Direction point is mean of random points taken from every cluster respectively
         rand_points = get_random_points_from_clusters(points, labels)
         direction_point = np.mean(rand_points, axis=0)
     elif annealing_method == 'centroid_split':
-        # Direction point is centroid - d(centroid, nearest_centroid) (centroid is splitting from its nearest centroid)
+        # Direction point is in opposite direction from nearest centroid (centroids are 'splitting')
         distances = la.norm(centroid - centroids, ord=2, axis=1)
         nearest_centroid_index = np.argmin(distances)
         nearest_centroid = centroids[nearest_centroid_index]
-        direction_point = centroid - distances[nearest_centroid_index]
+        direction_point = centroid + (centroid - nearest_centroid)
     elif annealing_method == 'centroid_gather':
         # Direction point is mean of current centroids
         direction_point = np.mean(centroids, axis=0)
@@ -344,7 +380,7 @@ def anneal_centroids(points,
     Possible values: 'random', 'min', 'max', 'maxmin', 'cluster_own', 'cluster_other', 'cluster_mean'
     :param annealing_weight_function: Decreasing function between 0 and 1 that calculates the weight of centroids
     movement: string
-     Possible values: 'exp', 'log', 'sq', 'sqrt', 'sigmoid', 'recip', 'fixed' - in this case function is
+     Possible values: 'exp', 'log', 'sq', 'sqrt', 'sigmoid', 'recip', 'flex', 'fixed' - in this case function is
      ignored and only beta parameter is taken in account
     :param beta: Tunning parameter for annealing vector calculation: real number
     :return: Annealed centroids (centroids with updated positions in n-dimensional space)
@@ -408,9 +444,9 @@ class KMESAR:
                  max_iter=300,
                  tol=1e-4,
                  simulated_annealing_on=True,
+                 annealing_method='max',
                  annealing_prob_function='sqrt',
                  alpha=1,
-                 annealing_method='max',
                  annealing_weight_function='log',
                  beta=1.1,
                  convergence_tracking=False,
@@ -439,8 +475,46 @@ class KMESAR:
         self.total_annealings_ = None
         self.history_ = None
         self.tracking_history_ = None
+        self.time_info_ = None
+        self._legend_annealing_prob = None
+        self._legend_annealing_weight = None
+
+        self._set_prob_functions_metadata()
+
+    def _set_prob_functions_metadata(self):
+        if self.annealing_prob_function == 'exp':
+            self._legend_annealing_prob = r'$p = e^{\frac{-it}{\alpha}}$'
+        elif self.annealing_prob_function == 'log':
+            self._legend_annealing_prob = r'$p = \frac{ln(1 + \alpha)}{ln(it + \alpha)}$'
+        elif self.annealing_prob_function == 'sq':
+            self._legend_annealing_prob = r'$p = min(\frac{\alpha + it}{it^2}, 1)$'
+        elif self.annealing_prob_function == 'sqrt':
+            self._legend_annealing_prob = r'$p = \frac{\alpha}{\sqrt{it - 1} + \alpha}$'
+        elif self.annealing_prob_function == 'sigmoid':
+            self._legend_annealing_prob = r'$p = \frac{1}{1 + \frac{it - 1}{\alpha + e^{-x}}}$'
+        elif self.annealing_prob_function == 'recip':
+            self._legend_annealing_prob = r'$p = \frac{1 + \alpha}{it + \alpha}$'
+        elif self.annealing_prob_function == 'flex':
+            self._legend_annealing_prob = r'$p = \frac{1}{it^{\alpha}}$'
+
+        if self.annealing_weight_function == 'exp':
+            self._legend_annealing_weight = r'$w = e^{\frac{-it}{\alpha}}$'
+        elif self.annealing_weight_function == 'log':
+            self._legend_annealing_weight = r'$w = \frac{ln(1 + \alpha)}{ln(it + \alpha)}$'
+        elif self.annealing_weight_function == 'sq':
+            self._legend_annealing_weight = r'$w = min(\frac{\alpha + it}{it^2}, 1)$'
+        elif self.annealing_weight_function == 'sqrt':
+            self._legend_annealing_weight = r'$w = \frac{\alpha}{\sqrt{it - 1} + \alpha}$'
+        elif self.annealing_weight_function == 'sigmoid':
+            self._legend_annealing_weight = r'$w = \frac{1}{1 + \frac{it - 1}{\alpha + e^{-x}}}$'
+        elif self.annealing_weight_function == 'recip':
+            self._legend_annealing_weight = r'$w = \frac{1 + \alpha}{it + \alpha}$'
+        elif self.annealing_weight_function == 'flex':
+            self._legend_annealing_weight = r'$w = \frac{1}{it^{\alpha}}$'
 
     def fit(self, points):
+        start_ns = time.time_ns()
+
         lower_bound = np.min(points, axis=0)
         upper_bound = np.max(points, axis=0)
 
@@ -569,9 +643,13 @@ class KMESAR:
         if self.convergence_tracking:
             self.tracking_history_ = tracking_history
 
+        end_ns = time.time_ns()
+        self.time_info_ = time_elapsed(start_ns, end_ns)
+
     def plot_tracking_history(self, points, out_file='_initial_'):
-        if self.labels_ is None:
-            print('No tracking histories present. Run algorithm before tracking convergence.')
+        if self.tracking_history_ is None:
+            print('No tracking histories present. Run algorithm with convergence_tracking=True '
+                  'before tracking convergence.')
             return
 
         colors = ['red', 'green', 'blue', 'yellow', 'brown', 'purple', 'm', 'cyan', 'indigo', 'forestgreen',
@@ -579,7 +657,8 @@ class KMESAR:
                   'orchid', 'darkslateblue', 'slategray', 'peru', 'steelblue', 'crimson']
 
         for n_it in range(self.n_init):
-            n_iter = self.tracking_history_[n_it]['n_iter']
+            # Important: 0th iteration is taken in account in tracking_history_, so +1
+            n_iter = self.tracking_history_[n_it]['n_iter'] + 1
 
             n_rows = n_iter // 2 if n_iter % 2 == 0 else n_iter // 2 + 1
             n_cols = 2
@@ -590,7 +669,9 @@ class KMESAR:
             for i in range(n_iter):
                 centroids = self.tracking_history_[n_it]['centroids'][i]
                 labels = self.tracking_history_[n_it]['labels'][i]
-                n_annealings = self.tracking_history_[n_it]['n_annealings'][i]
+
+                if self.simulated_annealing_on:
+                    n_annealings = self.tracking_history_[n_it]['n_annealings'][i]
 
                 ax = fig.add_subplot(n_rows, n_cols, subplot_ind)
 
@@ -601,7 +682,7 @@ class KMESAR:
                     ax.scatter(cluster_subsample[:, 0], cluster_subsample[:, 1],
                                c=colors[cluster_label], s=10, label=f'Cluster {cluster_label}')
 
-                ax.scatter(centroids[:, 0], centroids[:, 1], c='black', s=60, marker='x', label='Centroids')
+                ax.scatter(centroids[:, 0], centroids[:, 1], c='black', s=120, marker='x', label='Centroids')
 
                 if self.annealing_tracking:
                     centroid_pairs = self.tracking_history_[n_it]['annealing_history'][i]
@@ -619,8 +700,13 @@ class KMESAR:
                                     label=f'Annealing trigger, ' + weight_string
                                     )
 
+                if self.simulated_annealing_on:
+                    title = f'KMESAR: iteration={i}, n_annealings={n_annealings}'
+                else:
+                    title = f'K-Means: iteration={i}'
+
+                ax.set_title(title)
                 ax.legend(prop={'size': 6})
-                ax.set_title(f'KMESAR: iteration={i}, n_annealings={n_annealings}')
 
                 subplot_ind += 1
 
@@ -636,52 +722,106 @@ class KMESAR:
 
             plt.show()
 
-    def plot_annealing_prob_function(self):
-        if self.n_iter_ is None:
-            print('Run algorithm to get exact number of iterations. Setting n_iters_ to 10.')
-            n_iter = 10
-        else:
-            n_iter = self.n_iter_
-
+    def plot_annealing_prob_function(self, n_iter=30, color='teal'):
         x = np.arange(1, n_iter + 1, dtype=np.int16)
-
-        if self.annealing_prob_function == 'exp':
-            y = np.exp((-x + 1) / self.alpha)
-            legend = r'$f(it) = e^{\frac{-it}{\alpha}}$'
-        elif self.annealing_prob_function == 'log':
-            y = LN2 / np.log(self.alpha + x)
-            legend = r'$f(it) = \frac{ln2}{ln(it + \alpha)}$'
-        elif self.annealing_prob_function == 'sq':
-            ones = np.zeros(x.shape[0]) + 1
-            y = np.min([(self.alpha + x) / (x ** 2), ones], axis=0)
-            legend = r'$f(it) = min(\frac{\alpha + it}{it^2}, 1)$'
-        elif self.annealing_prob_function == 'sqrt':
-            y = self.alpha / (np.sqrt(x - 1) + self.alpha)
-            legend = r'$f(it) = \frac{\alpha}{\sqrt{it - 1} + \alpha}$'
-        elif self.annealing_prob_function == 'sigmoid':
-            y = 1 / (1 + (x - 1) / (self.alpha + np.exp(-x)))
-            legend = r'$f(it) = \frac{1}{1 + \frac{it - 1}{\alpha + e^{-x}}}$'
-        elif self.annealing_prob_function == 'recip':
-            y = (1 + self.alpha) / (x + self.alpha)
-            legend = r'$f(it) = \frac{1 + \alpha}{it + \alpha}$'
+        y = annealing_probability(x, annealing_prob_function=self.annealing_prob_function, alpha=self.alpha)
 
         fig, ax = plt.subplots(figsize=(5, 5))
 
-        ax.plot(x, y, c='blue')
+        ax.plot(x, y, c=color)
         ax.set_xlim(0, n_iter + 1)
         ax.set_ylim(0, 1.1)
         ax.set_xlabel('iteration')
         ax.set_ylabel('probability')
 
         alpha_title = r'$\alpha = $' + f'{self.alpha}'
-        ax.set_title(f'Annealing probability function, ' + alpha_title)
-        ax.legend([legend], prop={'size': 20})
+        ax.set_title(f'Annealing probability function: ' + alpha_title)
+        ax.legend([self._legend_annealing_prob], prop={'size': 20})
 
         plt.show()
 
+    def plot_annealing_weight_function(self, n_iter=30, color='firebrick'):
+        x = np.arange(1, n_iter + 1, dtype=np.int16)
+        y = annealing_weight(x, annealing_weight_function=self.annealing_weight_function, beta=self.beta)
+
+        fig, ax = plt.subplots(figsize=(5, 5))
+
+        ax.plot(x, y, c=color)
+        ax.set_xlim(0, n_iter + 1)
+        ax.set_ylim(0, 1.1)
+        ax.set_xlabel('iteration')
+        ax.set_ylabel('probability')
+
+        beta_title = r'$\beta = $' + f'{self.beta}'
+        ax.set_title(f'Annealing weight function: ' + beta_title)
+        ax.legend([self._legend_annealing_weight], prop={'size': 20})
+
+        plt.show()
+
+    def plot_annealing_functions(self, n_iter=30, color_prob='teal', color_weight='firebrick'):
+        x = np.arange(1, n_iter + 1, dtype=np.int16)
+        y_prob = annealing_probability(x, annealing_prob_function=self.annealing_prob_function, alpha=self.alpha)
+        y_weight = annealing_weight(x, annealing_weight_function=self.annealing_weight_function, beta=self.beta)
+
+        fig, ax = plt.subplots(figsize=(5, 5))
+
+        ax.plot(x, y_prob, c=color_prob)
+        ax.plot(x, y_weight, c=color_weight)
+        ax.set_xlim(0, n_iter + 1)
+        ax.set_ylim(0, 1.1)
+        ax.set_xlabel('iteration')
+        ax.set_ylabel('probability')
+
+        alpha_title = r'$\alpha = $' + f'{self.alpha}'
+        beta_title = r'$\beta = $' + f'{self.beta}'
+        ax.set_title(f'Annealing probability and weight functions: ' + alpha_title + ', ' + beta_title)
+        ax.legend([self._legend_annealing_prob, self._legend_annealing_weight], prop={'size': 20})
+
+        plt.show()
+
+    def algorithm_details(self):
+        init_method_ignored = f' (ignored)\n' if self.init_centroids is not None else '\n'
+        info = '--------------- Algorithm details ---------------\n' + \
+            f'    * Number of clusters (k): {self.k_clusters}\n' + \
+            f'    * Centroid initialization method: {self.init}' + init_method_ignored + \
+            f'    * Initial centroids (specified): {self.init_centroids is not None}\n' + \
+            f'    * Number of initialization repetition: {self.n_init}\n' + \
+            f'    * Maximum iterations: {self.max_iter}\n' + \
+            f'    * Convergence tolerance: {self.tol}\n' + \
+            f'    * Simulated annealing on: {self.simulated_annealing_on}\n' + \
+            f'    * Annealing method: {self.annealing_method}\n' + \
+            f'    * Annealing probability function: {self.annealing_prob_function}\n' + \
+            f'    * Annealing probability alpha: {self.alpha}\n' + \
+            f'    * Annealing weight function: {self.annealing_weight_function}\n' + \
+            f'    * Annealing weight beta: {self.beta}\n' + \
+            f'    * Convergence tracking: {self.convergence_tracking}\n' + \
+            f'    * Annealing tracking: {self.annealing_tracking}\n' + \
+            f'-------------------------------------------------'
+
+        return info
+
     def clustering_info(self):
-        if self.labels_ is not None:
-            return f'KMESAR: k_clusters={self.k_clusters}, ' \
-                   f'n_iter={self.n_iter_}, ' \
-                   f'total_annealings={self.total_annealings_}, ' \
-                   f'SSE={self.inertia_ : .3}'
+        if self.labels_ is None:
+            print('Run algorithm before checking clustering information.')
+            return
+
+        info = '------------- KMESAR clustering -------------\n' + \
+            f'    * Iterations before convergence: {self.n_iter_}\n' + \
+            f'    * Total annealings: {self.total_annealings_}\n' + \
+            f'    * Sum of squared error: {self.inertia_ : .3}\n' + \
+            f'    * Time elapsed: {self.time_info_}\n' + \
+            f' ---------------------------------------------'
+
+        return info
+
+    def clustering_plot_title(self):
+        if self.labels_ is None:
+            print('Run algorithm before checking clustering information.')
+            return
+
+        if self.simulated_annealing_on:
+            title = f'KMESAR: n_iter={self.n_iter_}, annealings={self.total_annealings_}, SSE={self.inertia_ : .3}'
+        else:
+            title = f'K-Means: n_iter={self.n_iter_}, SSE={self.inertia_ : .3}'
+
+        return title
