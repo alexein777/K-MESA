@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from sklearn.datasets import make_blobs
 
 
 def load_dataset_3_clusters_separate(c1_size=25, c2_size=25, c3_size=50):
@@ -34,6 +35,43 @@ def load_dataset_3_clusters_separate(c1_size=25, c2_size=25, c3_size=50):
     p3[correction_indices, 0] -= 0.6
 
     return np.concatenate([p1, p2, p3, p3_addition, noise])
+
+
+def create_circle(center=(0, 0), radius=1, n_samples=50):
+    return np.array([[center[0] + radius * np.cos(phi), center[1] + radius * np.sin(phi)]
+                     for phi in np.linspace(0, 2 * np.pi, n_samples, endpoint=False)])
+
+
+def create_filled_circle(center=(0, 0), radius=1, n_samples_outer=50):
+    c = np.array([center[0], center[1]])
+    filled_circle = np.array([c])
+    radius_iter = radius
+    radius_step = 10 * radius / n_samples_outer
+    n_samples_iter = n_samples_outer
+
+    while radius_iter > 0 and n_samples_iter > 0:
+        filled_circle = np.concatenate([filled_circle, create_circle(center, radius_iter, n_samples_iter)])
+        radius_iter -= radius_step
+        n_samples_iter -= np.floor(30 * radius_step)
+
+    return filled_circle
+
+
+def load_different_density_clusters(n_outer_1=150, n_outer_2=60, n_outer_3=30, noise=False):
+    c1 = create_filled_circle(radius=2.5, n_samples_outer=n_outer_1)
+    c2 = create_filled_circle(center=(-5, -0.5), radius=1, n_samples_outer=n_outer_2)
+    c3 = create_filled_circle(center=(6, 0.8), radius=1.2, n_samples_outer=n_outer_3)
+
+    blob_1, _ = make_blobs(n_samples=100, cluster_std=0.6, center_box=(4, -6))
+    blob_2, _ = make_blobs(n_samples=50, cluster_std=1.5, center_box=(-7, 5))
+
+    if noise:
+        noise_arr = np.array([[-6, 2], [-5.4, -2], [1.8, 5], [4., -1.2], [6, 2.5]])
+        X = np.concatenate([c1, c2, c3, blob_1, blob_2, noise_arr])
+    else:
+        X = np.concatenate([c1, c2, c3, blob_1, blob_2])
+
+    return X
 
 
 def plot_prob_function(prob_function, alpha, n_iter=15, color='blue'):
