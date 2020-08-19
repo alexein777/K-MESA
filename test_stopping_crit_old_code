@@ -1,0 +1,18 @@
+# if stopping_criterion_reached or it == self.max_iter:
+# Important: update labels for the final centroids update
+# labels = assign_points_to_centroids(points, centroids)
+#
+# # Resolve empty clusters, if any
+# centroids, labels, n_ecr = empty_clusters_resolution(points, centroids, labels, self.ecr_method)
+# total_ecr += n_ecr
+
+# # In case that final centroids had empty clusters, last tracked centroids must be updated
+# if self.tracking_scaler is None:
+#     tracking_history[n_it]['centroids'][-1] = centroids
+# else:
+#     tracking_history[n_it]['centroids'][-1] = self.tracking_scaler.inverse_transform(centroids)
+#
+# # Keep track of final labels and total number of iterations for the convergence
+# if self.convergence_tracking:
+#     tracking_history[n_it]['labels'].append(labels)
+#     tracking_history[n_it]['n_iter'] = it

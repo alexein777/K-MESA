@@ -6,8 +6,6 @@ import matplotlib.pyplot as plt
 import time
 from clustering.utils import time_elapsed
 
-LN2 = np.log(2)
-
 
 def euclidean_distance(vec1, vec2):
     """
@@ -32,7 +30,7 @@ def sse_single(points_j, centroid_j):
 def sum_of_squared_error(points, centroids, labels):
     """
     :param points:  Points from training set to be clustered: numpy array of shape (m, n)
-    :param centroids: Points representing cluster centroids: numpy array pf shape (k, n)
+    :param centroids: Points representing cluster centroids: numpy array of shape (k, n)
     :param labels: Current centroid indices (i.e cluster labels) with respect to point indices:
     numpy array of shape (m, )
     :return: Sum of squared error between cluster centroids and points assigned to those centroids: real number
@@ -52,7 +50,7 @@ def get_max_distances(points, centroids):
     """
     For every point in dataset, calculate maximum distance to centroids.
     :param points: Points from dataset to be clustered: numpy array of shape (m, n)
-    :param centroids: Points representing cluster centroids: numpy array pf shape (k, n)
+    :param centroids: Points representing cluster centroids: numpy array of shape (k, n)
     :return: Array of maximum distances from every point to centroids: numpy array of shape (m, n)
     """
 
@@ -125,7 +123,7 @@ def assign_points_to_centroids(points, centroids):
     return labels
 
 
-def empty_clusters_resolution(points, centroids, labels, ecr_method='max', bounds=None):
+def empty_clusters_resolution(points, centroids, labels, ecr_method='random', bounds=None):
     """
     :param points: Points from training set to be clustered: numpy array of shape (m, n)
     :param centroids: Points representing cluster centroids: numpy array of shape (k, n)
@@ -143,7 +141,7 @@ def empty_clusters_resolution(points, centroids, labels, ecr_method='max', bound
 
     # Quick check if all labels are present
     if unique_labels.shape[0] == k_labels:
-        return centroids, labels, 0
+        return centroids, labels, 0, np.array([])
 
     # Prepare neccessary variables
     if bounds is not None:
@@ -153,48 +151,55 @@ def empty_clusters_resolution(points, centroids, labels, ecr_method='max', bound
         upper_bound = np.max(points, axis=0)
 
     n = points.shape[1]
-    new_centroids = copy.deepcopy(centroids)
-    new_labels = copy.deepcopy(labels)
     n_ecr = 0
 
-    # Loop until are labels are present
-    while unique_labels.shape[0] < k_labels:
-        # Check which labels are missing
-        for label_j in range(k_labels):
-            # If label_j is missing, change centroids[label_j] to cever at least one point from dataset
-            if label_j not in unique_labels:
-                if ecr_method == 'random':
-                    new_centroids[label_j] = lower_bound + np.random.random_sample((n,)) * (upper_bound - lower_bound)
+    new_centroids = copy.deepcopy(centroids)
+    new_labels = copy.deepcopy(labels)
+    all_labels = np.array(range(k_labels))
+    all_labels_present = False
+    missing_labels = np.setdiff1d(all_labels, unique_labels)
+    ecr_indices = set([])
 
-                    # Break for-loop to get new labels immediately and restart resolutions with respect to new_centroids
-                    break
-                elif ecr_method == 'max':
-                    # Get point furthest from all centroids
-                    furthest_point = get_furthest_point(points, new_centroids)
-                    new_centroids[label_j] = furthest_point
-                elif ecr_method == 'sse':
-                    sses = get_sses(points, new_centroids, new_labels)
-                    max_label = np.argmax(sses)
+    while not all_labels_present:
+        for missing_label in missing_labels:
+            # Update new_centroids[missing_label] to cover at least one point from dataset
+            if ecr_method == 'random':
+                new_centroids[missing_label] = lower_bound + np.random.random_sample((n,)) * (upper_bound - lower_bound)
+            elif ecr_method == 'min':
+                # distances = la.norm(new_centroids[missing_label] - points, ord=2, axis=1)
+                # min_index = np.argmin(distances)
+                # new_centroids[missing_label] = points[min_index]
+                raise NotImplemented('"min" ECR is not working properly. Use "random" instead.')
+            elif ecr_method == 'max':
+                # furthest_point = get_furthest_point(points, new_centroids)
+                # new_centroids[missing_label] = furthest_point
+                raise NotImplemented('"max" ECR is not working properly. Use "random" instead.')
+            elif ecr_method == 'sse':
+                # # Get SSE for every cluster seperately
+                # sses = get_sses(points, new_centroids, new_labels)
+                #
+                # # Extract cluster with maximum SSE
+                # max_label = np.argmax(sses)
+                # points_with_max_label = extract_labeled_points(points, new_labels, max_label)
+                #
+                # # Get random point from that cluster and assign centroid to be that point
+                # rand_index = np.random.randint(0, points_with_max_label.shape[0])
+                # new_centroids[missing_label] = points_with_max_label[rand_index]
+                raise NotImplemented('"sse" ECR is not working properly. Use "random" instead.')
+            else:
+                raise ValueError(f'Unknown ECR method: {ecr_method}')
 
-                    # Extract cluster with maximum SSE
-                    points_with_max_label = extract_labeled_points(points, new_labels, max_label)
+            n_ecr += 1
+            ecr_indices.add(missing_label)
 
-                    # Get random point from that cluster and assign centroid to be that point
-                    rand_index = np.random.randint(0, points_with_max_label.shape[0])
-                    new_centroids[label_j] = points_with_max_label[rand_index]
-
-                    # Break for-loop to get new labels immediately and restart resolutions with respect to new_centroids
-                    break
-                else:
-                    raise ValueError(f'Unknown ECR method: {ecr_method}')
-
-                n_ecr += 1
-
-        # Update labels with respect to new_centroids
         new_labels = assign_points_to_centroids(points, new_centroids)
         unique_labels = np.unique(new_labels)
+        missing_labels = np.setdiff1d(all_labels, unique_labels)
 
-    return new_centroids, new_labels, n_ecr
+        if missing_labels.shape[0] == 0:
+            all_labels_present = True
+
+    return new_centroids, new_labels, n_ecr, np.array(list(ecr_indices))
 
 
 def extract_labeled_points(points, labels, label_j):
@@ -233,37 +238,63 @@ def update_centroids(points, centroids, labels):
     return new_centroids
 
 
-def initialize_centroids_random(points, k_centroids, lower_bound=None, upper_bound=None):
+def initialize_centroids_random(points, k_centroids, bounds=None):
     """
+    This function may produce empty clusters. It's neccessary to call empty_clusters_resolution after this function.
     :param points: Points from training set to be clustered: numpy array of shape (m, n)
     :param k_centroids: Number of centroids to be initialized: integer
-    :param lower_bound: Vector of minimum values across points dimensions: numpy array of shape (1, n)
-    :param upper_bound: Vector of maximum values across points dimensions: numpy array of shape (1, n)
+    :param ecr_method: Method that determines how the empty clusters are resolved: string
+    Possible values: 'random', 'max', 'sse'
+    :param bounds: Tupple of lower and upper bounds of training set. If None, they are calculated.
     :return: Initial centroids: numpy array of shape (k, n)
     """
+
+    if bounds is not None:
+        lower_bound, upper_bound = bounds
+    else:
+        lower_bound = np.min(points, axis=0)
+        upper_bound = np.max(points, axis=0)
 
     n = points.shape[1]
     centroids = np.zeros(shape=(k_centroids, n))
 
-    if lower_bound is None or upper_bound is None:
-        for k in range(k_centroids):
-            centroids[k] = np.random.random_sample((n,))
-    elif lower_bound is not None and upper_bound is not None:
-        for k in range(k_centroids):
-            centroids[k] = lower_bound + np.random.random_sample((n,)) * (upper_bound - lower_bound)
+    for k in range(k_centroids):
+        centroids[k] = lower_bound + np.random.random_sample((n,)) * (upper_bound - lower_bound)
 
-    # If there is a centroid with none points assigned to it, reinitialize one of centroids
-    n_labels = len(np.unique(assign_points_to_centroids(points, centroids)))
+    labels = assign_points_to_centroids(points, centroids)
+    unique_labels = np.unique(labels)
 
-    while n_labels < k_centroids:
-        rand_index = np.random.randint(0, k_centroids)
+    if unique_labels.shape[0] == k_centroids:
+        return centroids
 
-        if lower_bound is None or upper_bound is None:
-            centroids[rand_index] = np.random.random_sample((n,))
-        elif lower_bound is not None and upper_bound is not None:
-            centroids[rand_index] = lower_bound + np.random.random_sample((n,)) * (upper_bound - lower_bound)
+    return centroids
 
-        n_labels = len(np.unique(assign_points_to_centroids(points, centroids)))
+
+def initialize_centroids_advanced(points, k_centroids):
+    """
+    K-Means++ algorithm for centroid initialization. Centroids are initialized iteratively: first is random point
+    from dataset, and every other is the furthest point from current centroids.
+    :param points: Points from dataset to be clustered: numpy array of shape (m, n)
+    :param k_centroids: Number of centroids to be initialized: integer
+    :return: Initialized centroids: numpy array of shape (k_centroids, n)
+    """
+
+    if k_centroids <= 0:
+        raise ValueError(f'Invalid number of centroids: {k_centroids} (expected k > 0)')
+
+    m = points.shape[0]
+    n = points.shape[1]
+    centroids = np.array([]).reshape(0, n)
+
+    # Initializing first centroid
+    rand_index = np.random.randint(0, m)
+    rand_point = points[rand_index]
+    centroids = np.vstack((centroids, rand_point))
+
+    # Initialize other centroids iteratively
+    for i in range(1, k_centroids):
+        furthest_point = get_furthest_point(points, centroids)
+        centroids = np.vstack((centroids, furthest_point))
 
     return centroids
 
@@ -285,6 +316,7 @@ def check_centroids_update(old_centroids, new_centroids, tol, norm='euclidean'):
     else:
         raise ValueError(f'Unknown norm type: {norm}')
 
+    # If all centroid updates are less than tolerance, stopping criterion is reached
     stoppping_criterion_reached = (diff <= tol).all()
 
     return stoppping_criterion_reached
@@ -378,7 +410,8 @@ def calculate_annealing_vector(points,
     :param bounds: Lower and upper bounds (min and max) of the training set (points). If None, they are calculated,
     else unpacked from a tuple.
     :param annealing_method: Specifies how the centroids are annealed (i.e moved from their current position): string
-    Possible values: 'random', 'min', 'max', 'maxmin', 'cluster_own', 'cluster_other', 'cluster_mean'
+    Possible values: 'random', 'min', 'max', 'maxmin', 'cluster_own', 'cluster_other', 'cluster_mean', 'centroid_split',
+    'centroid_gather'
     :param annealing_weight_function: Decreasing function between 0 and 1 that handles the intensity by which will
     annealing vector pull the centroid in the specified direction: string
     Possible values: 'exp', 'log', 'sq', 'sqrt', 'sigmoid', 'recip', 'fixed' - in this case function is ignored and only
@@ -397,7 +430,15 @@ def calculate_annealing_vector(points,
     else:
         centroid = centroids[label_j]
 
-    if annealing_method == 'random':
+    # Carousel method chooses one of the possible methods randomly
+    if annealing_method == 'carousel':
+        methods = ['random', 'min', 'max', 'cluster_own', 'cluster_other', 'cluster_mean',
+                   'centroid_split', 'centroid_gather']
+        method = np.random.choice(methods)
+    else:
+        method = annealing_method
+
+    if method == 'random':
         # Direction point is random point from n-dimensional space of the training set with given bounds
         if bounds is None:
             lower_bound = np.min(points, axis=0)
@@ -406,7 +447,7 @@ def calculate_annealing_vector(points,
             lower_bound, upper_bound = bounds
 
         direction_point = lower_bound + np.random.random(points[0].shape) * (upper_bound - lower_bound)
-    elif annealing_method == 'min':
+    elif method == 'min':
         # Direction point is point from cluster label_j with the lowest distance from current centroid
         points_with_label_j = extract_labeled_points(points, labels, label_j)
 
@@ -417,7 +458,7 @@ def calculate_annealing_vector(points,
             distances = la.norm(centroid - points_with_label_j, ord=2, axis=1)
             min_index = np.argmin(distances)
             direction_point = points_with_label_j[min_index]
-    elif annealing_method == 'max':
+    elif method == 'max':
         # Direction point is point from cluster label_j with the highest distance from current centroid
         points_with_label_j = extract_labeled_points(points, labels, label_j)
 
@@ -428,7 +469,7 @@ def calculate_annealing_vector(points,
             distances = la.norm(centroid - points_with_label_j, ord=2, axis=1)
             max_index = np.argmax(distances)
             direction_point = points_with_label_j[max_index]
-    elif annealing_method == 'maxmin':
+    elif method == 'maxmin':
         # Direction point is point from cluster label_j with the lowest/highest distance from current centroid,
         # depending on parity of current iteration it
         points_with_label_j = extract_labeled_points(points, labels, label_j)
@@ -446,7 +487,7 @@ def calculate_annealing_vector(points,
                 index = np.argmin(distances)
 
             direction_point = points_with_label_j[index]
-    elif annealing_method == 'cluster_own':
+    elif method == 'cluster_own':
         # Direction point is random point from centroid's own cluster
         points_with_label_j = extract_labeled_points(points, labels, label_j)
 
@@ -456,7 +497,7 @@ def calculate_annealing_vector(points,
         else:
             rand_index = np.random.randint(0, points_with_label_j.shape[0])
             direction_point = points_with_label_j[rand_index]
-    elif annealing_method == 'cluster_other':
+    elif method == 'cluster_other':
         # Direction point is random point from some other cluster different from centroid's corresponding points
         labels_without_j = labels[np.where(labels != label_j)]
 
@@ -475,19 +516,23 @@ def calculate_annealing_vector(points,
         else:
             rand_index = np.random.randint(0, points_with_rand_label.shape[0])
             direction_point = points_with_rand_label[rand_index]
-    elif annealing_method == 'cluster_mean':
+    elif method == 'cluster_mean':
         # Direction point is mean of random points taken from every cluster respectively
         rand_points = get_random_points_from_clusters(points, labels)
         direction_point = np.mean(rand_points, axis=0)
-    elif annealing_method == 'centroid_split':
+    elif method == 'centroid_split':
         # Direction point is in opposite direction from nearest centroid (centroids are 'splitting')
-        distances = la.norm(centroid - centroids, ord=2, axis=1)
+        indices = np.array(range(centroids.shape[0]))
+        other_centroids = centroids[np.where(indices != label_j)]
+        distances = la.norm(centroid - other_centroids, ord=2, axis=1)
         nearest_centroid_index = np.argmin(distances)
         nearest_centroid = centroids[nearest_centroid_index]
-        direction_point = centroid + (centroid - nearest_centroid)
-    elif annealing_method == 'centroid_gather':
+        direction_point = centroid - nearest_centroid
+    elif method == 'centroid_gather':
         # Direction point is mean of current centroids
         direction_point = np.mean(centroids, axis=0)
+    else:
+        raise ValueError(f'Unknown annealing method: {method}')
 
     # Annealing vector is weighted with respect to annealing_weight_function
     if annealing_weight_function == 'fixed':
@@ -500,7 +545,7 @@ def calculate_annealing_vector(points,
         weight = annealing_weight(it, annealing_weight_function, beta)
         annealing_vector = weight * (direction_point - centroid)
 
-        if annealing_method == 'min' or (annealing_method == 'maxmin' and it % 2 == 0):
+        if method == 'min' or (method == 'maxmin' and it % 2 == 0):
             # In cthese cases centroid 'jumps' over directional point by the distance + w% of that distance
             annealing_vector += (direction_point - centroid)
 
@@ -550,6 +595,7 @@ def anneal_centroids(points,
     for i in range(k):
         q = np.random.uniform(0, 1)
 
+        # If p > q, simulated annealing is applied to centroids
         if p > q:
             # Annealing vector for centroids[i]
             annealing_vector, _, weight = \
@@ -596,17 +642,36 @@ class KMESAR:
                  n_init=10,
                  max_iter=300,
                  tol=1e-4,
-                 ecr_method='sse',
+                 ecr_method='random',
                  simulated_annealing_on=True,
                  annealing_method='max',
                  annealing_prob_function='sqrt',
                  alpha=3,
                  annealing_weight_function='log',
-                 beta=3,
+                 beta=4,
                  convergence_tracking=False,
                  annealing_tracking=False,
+                 ecr_tracking=False,
                  tracking_scaler=None
                  ):
+        """
+        :param k_clusters: Number of clusters
+        :param init: Centroids initialization method
+        :param init_centroids: Specify exact initial centroids if neccessary
+        :param n_init: Number of reinitalization iterations
+        :param max_iter: Maximum number of iterations for convergence
+        :param tol: Convergence tolerance
+        :param ecr_method: Empty clusters resolution method
+        :param simulated_annealing_on: Simulated annealing turned on or off
+        :param annealing_method: Annealing method used for centroids annealing
+        :param annealing_prob_function: Annealing probability for centroids
+        :param alpha: Annealing probability hyperparameter
+        :param annealing_weight_function: Annealing weight used for centroid annealing
+        :param beta: Annealing weight hyperparameter
+        :param convergence_tracking: Track algorithm convergence
+        :param annealing_tracking: Track annealings in every iteration
+        :param tracking_scaler: Scaler used for dataset scaling (used for inverse transformation of centroids)
+        """
 
         self.k_clusters = k_clusters
         self.init = init
@@ -623,7 +688,11 @@ class KMESAR:
         self.beta = beta
         self.convergence_tracking = convergence_tracking
         self.annealing_tracking = annealing_tracking
+        self.ecr_tracking = ecr_tracking
         self.tracking_scaler = tracking_scaler
+
+        if self.simulated_annealing_on is False:
+            self.annealing_tracking = False
 
         self.best_result_index_ = None
         self.labels_ = None
@@ -679,9 +748,7 @@ class KMESAR:
     def fit(self, points):
         """
         :param points: Points from dataset to be clustered: numpy array of shape (m, n)
-        :param tracking_scaler: Scaler used to inverse transform calculated centroids to enable adequate convergence
-        tracking and plotting
-        :return:
+        :return: None. Estimator attributes are updated, such as labels_ and centroids_
         """
 
         start_ns = time.time_ns()
@@ -707,44 +774,64 @@ class KMESAR:
         for n_it in range(self.n_init):
             if self.init_centroids is not None:
                 initial_centroids = self.init_centroids
-            else:
-                initial_centroids = initialize_centroids_random(points, self.k_clusters, lower_bound, upper_bound)
+            elif self.init == 'random':
+                initial_centroids = initialize_centroids_random(points, self.k_clusters, (lower_bound, upper_bound))
+            elif self.init == 'k-means++':
+                initial_centroids = initialize_centroids_advanced(points, self.k_clusters)
 
-            centroids = initial_centroids
+            # Iteration 0 (i.e initial state of the algorithm, with initial centroids and labels assigned to them)
+            labels = assign_points_to_centroids(points, initial_centroids)
+            centroids, labels, n_ecr, ecr_indices = empty_clusters_resolution(points, initial_centroids, labels,
+                                                                              ecr_method=self.ecr_method,
+                                                                              bounds=(lower_bound, upper_bound))
+
+            # Track number of annealings and empty cluster resolutions
             total_annealings = 0
-            total_ecr = 0
+            total_ecr = n_ecr
 
             if self.convergence_tracking:
                 tracking_history.append({})
 
+                # Keeping track of 0th iteration (i.e initial algorithm state with initial centroids)
                 if self.tracking_scaler is None:
-                    tracking_history[n_it]['centroids'] = [initial_centroids]
+                    tracking_history[n_it]['centroids'] = [centroids]
                 else:
-                    tracking_history[n_it]['centroids'] = [self.tracking_scaler.inverse_transform(initial_centroids)]
+                    tracking_history[n_it]['centroids'] = [self.tracking_scaler.inverse_transform(centroids)]
 
-                tracking_history[n_it]['labels'] = []
+                tracking_history[n_it]['labels'] = [labels]
                 tracking_history[n_it]['n_iter'] = 0
-                tracking_history[n_it]['n_annealings'] = [0]
 
-            if self.convergence_tracking and self.annealing_tracking:
-                tracking_history[n_it]['annealing_history'] = [None]
-                tracking_history[n_it]['annealing_weights'] = [None]
+                if self.annealing_tracking:
+                    tracking_history[n_it]['n_annealings'] = [0]
+                    tracking_history[n_it]['annealing_history'] = [None]
+                    tracking_history[n_it]['annealing_weights'] = [None]
 
+                if self.ecr_tracking:
+                    tracking_history[n_it]['n_ecr'] = [n_ecr]
+
+                    if n_ecr > 0:
+                        # Extract annealed centroids and corresponding ECR-updated centroids
+                        if self.tracking_scaler is None:
+                            init_centroids_ind = initial_centroids[ecr_indices]
+                            ecr_centroids_ind = centroids[ecr_indices]
+                        else:
+                            init_centroids_ind = \
+                                self.tracking_scaler.inverse_transform(initial_centroids[ecr_indices])
+                            ecr_centroids_ind = \
+                                self.tracking_scaler.inverse_transform(centroids[ecr_indices])
+
+                        centroid_pairs = get_centroid_pairs(init_centroids_ind, ecr_centroids_ind)
+
+                        tracking_history[n_it]['ecr_history'] = [centroid_pairs]
+                    else:
+                        tracking_history[n_it]['ecr_history'] = [None]
+
+            # Repeat before convergence
             for it in range(1, self.max_iter + 1):
-                # Step 1: Assign every point to nearest centroid
-                labels = assign_points_to_centroids(points, centroids)
-
-                # Step 2: Resolve empty clusters if any
-                centroids, labels, n_ecr = empty_clusters_resolution(points, centroids, labels, self.ecr_method)
-                total_ecr += n_ecr
-
-                if self.convergence_tracking:
-                    tracking_history[n_it]['labels'].append(labels)
-
-                # Step 3: Update centroids by calculating mean of points to corresponding centroid
+                # Step 1: Update centroids
                 new_centroids = update_centroids(points, centroids, labels)
 
-                # Step 4: Anneal centroids (update their position) in order to avoid local optima
+                # Step 2: Anneal centroids (update their position) in order to avoid local optima
                 if self.simulated_annealing_on:
                     mean_centroids = new_centroids
                     new_centroids, n_annealings, annealed_indices, annealing_weights = \
@@ -762,11 +849,9 @@ class KMESAR:
                     total_annealings += n_annealings
 
                     # Keep track of number of annealings occured in current iteration
-                    if self.convergence_tracking:
+                    if self.convergence_tracking and self.annealing_tracking:
                         tracking_history[n_it]['n_annealings'].append(n_annealings)
 
-                    # Keep track of centroids update for visual representation of annealed centroids
-                    if self.convergence_tracking and self.annealing_tracking:
                         # If there were any annealings in current iteration
                         if n_annealings > 0:
                             # Extract mean_centroids and corresponding annealed_centroids
@@ -787,8 +872,36 @@ class KMESAR:
                             tracking_history[n_it]['annealing_history'].append(None)
                             tracking_history[n_it]['annealing_weights'].append(None)
 
-                # Keep track of new centroids
-                # Note: len(tracking_history[n_it]['centroids']) == len(tracking_history[n_it]['labels']) + 1
+                # Step 3: Assign labels to new centroids and remove empty clusters if any
+                labels = assign_points_to_centroids(points, new_centroids)
+                ann_centroids_temp = new_centroids
+                new_centroids, labels, n_ecr, ecr_indices = empty_clusters_resolution(points, new_centroids, labels,
+                                                                                      ecr_method=self.ecr_method,
+                                                                                      bounds=(lower_bound, upper_bound))
+                total_ecr += n_ecr
+
+                if self.convergence_tracking and self.ecr_tracking:
+                    tracking_history[n_it]['n_ecr'].append(n_ecr)
+
+                    # If there were any ECR triggers in current iteration
+                    if n_ecr > 0:
+                        # Extract annealed centroids and corresponding ECR-updated centroids
+                        if self.tracking_scaler is None:
+                            ann_centroids_temp_ind = ann_centroids_temp[ecr_indices]
+                            ecr_centroids_ind = new_centroids[ecr_indices]
+                        else:
+                            ann_centroids_temp_ind = \
+                                self.tracking_scaler.inverse_transform(ann_centroids_temp[ecr_indices])
+                            ecr_centroids_ind = \
+                                self.tracking_scaler.inverse_transform(new_centroids[ecr_indices])
+
+                        centroid_pairs = get_centroid_pairs(ann_centroids_temp_ind, ecr_centroids_ind)
+
+                        tracking_history[n_it]['ecr_history'].append(centroid_pairs)
+                    else:
+                        tracking_history[n_it]['ecr_history'].append(None)
+
+                # Keep track of new centroids and labels assigned to them
                 if self.convergence_tracking:
                     if self.tracking_scaler is None:
                         tracking_history[n_it]['centroids'].append(new_centroids)
@@ -797,27 +910,14 @@ class KMESAR:
                             self.tracking_scaler.inverse_transform(new_centroids)
                         )
 
+                    tracking_history[n_it]['labels'].append(labels)
+
                 # Check if stopping criterion is reached
                 stopping_criterion_reached = check_centroids_update(centroids, new_centroids, self.tol)
                 centroids = new_centroids
 
                 if stopping_criterion_reached or it == self.max_iter:
-                    # Important: update labels for the final centroids update
-                    labels = assign_points_to_centroids(points, centroids)
-
-                    # Resolve empty clusters, if any
-                    centroids, labels, n_ecr = empty_clusters_resolution(points, centroids, labels, self.ecr_method)
-                    total_ecr += n_ecr
-
-                    # In case that final centroids had empty clusters, last tracked centroids must be updated
-                    if self.tracking_scaler is None:
-                        tracking_history[n_it]['centroids'][-1] = centroids
-                    else:
-                        tracking_history[n_it]['centroids'][-1] = self.tracking_scaler.inverse_transform(centroids)
-
-                    # Keep track of final labels and total number of iterations for the convergence
                     if self.convergence_tracking:
-                        tracking_history[n_it]['labels'].append(labels)
                         tracking_history[n_it]['n_iter'] = it
 
                     break
@@ -839,7 +939,10 @@ class KMESAR:
         self.history_ = history
         self.labels_ = history['labels'][best_result_index]
         self.centroids_ = history['centroids'][best_result_index]
-        self.scaled_centroids_ = self.tracking_scaler.inverse_transform(self.centroids_)
+
+        if self.tracking_scaler is not None:
+            self.scaled_centroids_ = self.tracking_scaler.inverse_transform(self.centroids_)
+
         self.inertia_ = history['inertia'][best_result_index]
         self.n_iter_ = history['n_iter'][best_result_index]
         self.total_ecr_ = history['total_ecr'][best_result_index]
@@ -858,14 +961,13 @@ class KMESAR:
     def set_scaled_centroids(self, scaled_centroids):
         self.scaled_centroids_ = scaled_centroids
 
-    def _plot_specified_tracking_history(self, points, reinit_iter, show_iter_mod, out_file):
+    def _plot_specified_tracking_history(self, points, reinit_iter, show_iter_mod, show_cc_labels, out_file):
         if reinit_iter == 'best':
             th = self.tracking_history_[self.best_result_index_]
         else:
             th = self.tracking_history_[reinit_iter]
 
         n_iter = th['n_iter']
-        n_iter_mod = n_iter % show_iter_mod
         iters = np.arange(1, n_iter + 1, show_iter_mod)
         iters = np.append(iters, n_iter) if iters[-1] != n_iter else iters
         iters_len = iters.shape[0]
@@ -874,7 +976,7 @@ class KMESAR:
         n_rows = iters_len // 2 + 1
         n_cols = 2
 
-        fig = plt.figure(figsize=(10, 2 * iters_len))
+        fig = plt.figure(figsize=(12, 5 * n_rows))
         subplot_ind = 1
 
         # Plot initial state
@@ -887,10 +989,12 @@ class KMESAR:
             indices = np.where(init_labels == cluster_label)
             cluster_subsample = points[indices]
 
+            label_str = f'Cluster {cluster_label}' if show_cc_labels else '_nolegend_'
             ax.scatter(cluster_subsample[:, 0], cluster_subsample[:, 1],
-                       c=self._colors[cluster_label], s=8, label=f'Cluster {cluster_label}')
+                       c=self._colors[cluster_label], s=8, label=label_str)
 
-        ax.scatter(init_centroids[:, 0], init_centroids[:, 1], c='black', s=120, marker='x', label='Centroids')
+        label_str = 'Centroids' if show_cc_labels else '_nolegend_'
+        ax.scatter(init_centroids[:, 0], init_centroids[:, 1], c='black', s=120, marker='x', label=label_str)
 
         if self.simulated_annealing_on:
             title = f'KMESAR initial state (iteration=0)'
@@ -898,7 +1002,9 @@ class KMESAR:
             title = f'K-Means initial state (iteration=0)'
 
         ax.set_title(title)
-        ax.legend(prop={'size': 6})
+
+        if show_cc_labels:
+            ax.legend(prop={'size': 7})
 
         subplot_ind += 1
 
@@ -907,43 +1013,80 @@ class KMESAR:
             centroids = th['centroids'][it]
             labels = th['labels'][it]
 
-            if self.simulated_annealing_on:
-                n_annealings = th['n_annealings'][it]
-
             ax = fig.add_subplot(n_rows, n_cols, subplot_ind)
 
             for cluster_label in range(self.k_clusters):
                 indices = np.where(labels == cluster_label)
                 cluster_subsample = points[indices]
 
+                label_str = f'Cluster {cluster_label}' if show_cc_labels else '_nolegend_'
                 ax.scatter(cluster_subsample[:, 0], cluster_subsample[:, 1],
-                           c=self._colors[cluster_label], s=8, label=f'Cluster {cluster_label}')
+                           c=self._colors[cluster_label], s=8, label=label_str)
 
-            ax.scatter(centroids[:, 0], centroids[:, 1], c='black', s=120, marker='x', label='Centroids')
+            label_str = 'Centroids' if show_cc_labels else '_nolegend_'
+            ax.scatter(centroids[:, 0], centroids[:, 1], c='black', s=120, marker='x', label=label_str)
 
             if self.annealing_tracking:
+                n_annealings = th['n_annealings'][it]
                 centroid_pairs = th['annealing_history'][it]
                 annealing_weights = th['annealing_weights'][it]
 
                 if centroid_pairs is not None:  # and annealing_weights is not None
+                    labeled_once = False
                     for centroid_pair, annealing_weight in zip(centroid_pairs, annealing_weights):
                         mean_centroid = centroid_pair[0]
                         annealed_centroid = centroid_pair[1]
                         weight_string = f'w = {annealing_weight : .3}'
 
-                        ax.plot([mean_centroid[0], annealed_centroid[0]],
-                                [mean_centroid[1], annealed_centroid[1]],
-                                c='dimgray',
-                                label=f'Annealing trigger, ' + weight_string
-                                )
+                        if not labeled_once:
+                            ax.plot([mean_centroid[0], annealed_centroid[0]],
+                                    [mean_centroid[1], annealed_centroid[1]],
+                                    c='dimgray',
+                                    linewidth=0.8,
+                                    label=f'Annealing trigger, ' + weight_string)
+                            labeled_once = True
+                        else:
+                            ax.plot([mean_centroid[0], annealed_centroid[0]],
+                                    [mean_centroid[1], annealed_centroid[1]],
+                                    c='dimgray',
+                                    linewidth=0.8)
 
-            if self.simulated_annealing_on:
+            if self.ecr_tracking:
+                centroid_pairs = th['ecr_history'][it]
+                n_ecr = th['n_ecr'][it]
+
+                if centroid_pairs is not None:
+                    labeled_once = False
+                    for centroid_pair in centroid_pairs:
+                        annealed_centroid = centroid_pair[0]
+                        ecr_centroid = centroid_pair[1]
+
+                        if not labeled_once:
+                            ax.plot([annealed_centroid[0], ecr_centroid[0]],
+                                    [annealed_centroid[1], ecr_centroid[1]],
+                                    c='rosybrown',
+                                    linewidth=0.8,
+                                    label='ECR trigger')
+                            labeled_once = True
+                        else:
+                            ax.plot([annealed_centroid[0], ecr_centroid[0]],
+                                    [annealed_centroid[1], ecr_centroid[1]],
+                                    c='rosybrown',
+                                    linewidth=0.8)
+
+            if self.annealing_tracking and self.ecr_tracking:
+                title = f'KMESAR: iteration={it}, n_annealings={n_annealings}, n_ecr={n_ecr}'
+            elif self.annealing_tracking and not self.ecr_tracking:
                 title = f'KMESAR: iteration={it}, n_annealings={n_annealings}'
+            elif not self.annealing_tracking and self.ecr_tracking:
+                title = f'KMESAR: iteration={it}, n_ecr={n_ecr}'
             else:
                 title = f'K-Means: iteration={it}'
 
             ax.set_title(title)
-            ax.legend(prop={'size': 6})
+
+            if show_cc_labels or n_annealings > 0:
+                ax.legend(prop={'size': 7})
 
             subplot_ind += 1
 
@@ -961,7 +1104,8 @@ class KMESAR:
 
         plt.show()
 
-    def plot_tracking_history(self, points, reinit_iter='best', show_iter_mod=1, out_file='_initial_'):
+    def plot_tracking_history(self, points, reinit_iter='best', show_iter_mod=1,
+                              show_cc_labels=True, out_file='_initial_'):
         if self.tracking_history_ is None:
             print('No tracking histories present. Run algorithm with convergence_tracking=True '
                   'before tracking convergence.')
@@ -973,9 +1117,9 @@ class KMESAR:
         if reinit_iter == 'all':
             for n_it in range(self.n_init):
                 # Tracking history for n_it reinitialization's iteration
-                self._plot_specified_tracking_history(points, n_it, show_iter_mod, out_file)
+                self._plot_specified_tracking_history(points, n_it, show_iter_mod, show_cc_labels, out_file)
         else:
-            self._plot_specified_tracking_history(points, reinit_iter, show_iter_mod, out_file)
+            self._plot_specified_tracking_history(points, reinit_iter, show_iter_mod, show_cc_labels, out_file)
 
     def plot_annealing_prob_function(self, n_iter=30, color='teal'):
         x = np.arange(1, n_iter + 1, dtype=np.int16)
@@ -1042,7 +1186,7 @@ class KMESAR:
         else:
             scaler_type_str = str(type(self.tracking_scaler))
             dot_index = scaler_type_str.rindex('.')
-            scaler_type = scaler_type_str[dot_index + 1 : -2]
+            scaler_type = scaler_type_str[dot_index + 1: -2]
 
         info = '--------------- Algorithm details ---------------\n' + \
                f'    * Number of clusters (k): {self.k_clusters}\n' + \
@@ -1060,6 +1204,7 @@ class KMESAR:
                f'    * Annealing weight beta: {self.beta}\n' + \
                f'    * Convergence tracking: {self.convergence_tracking}\n' + \
                f'    * Annealing tracking: {self.annealing_tracking}\n' + \
+               f'    * ECR tracking: {self.ecr_tracking}\n' + \
                f'    * Tracking scaler: {scaler_type}\n' + \
                f'-------------------------------------------------'
 
@@ -1098,7 +1243,7 @@ class KMESAR:
 
         return title
 
-    def plot_clustered_data(self, points, colors=None):
+    def plot_clustered_data(self, points, colors=None, show_cc_labels=True):
         if self.labels_ is None:
             print('Run algorithm before plotting clustered dataset.')
             return
@@ -1110,12 +1255,18 @@ class KMESAR:
 
         for label in range(self.k_clusters):
             cluster = points[np.where(self.labels_ == label)]
-            ax.scatter(cluster[:, 0], cluster[:, 1], c=colors[label], s=10, label=f'Cluster {label}')
+
+            label_str = f'Cluster {label}' if show_cc_labels else '_nolegend_'
+            ax.scatter(cluster[:, 0], cluster[:, 1], c=colors[label], s=10, label=label_str)
 
         centroids = self.centroids_ if self.tracking_scaler is None else self.scaled_centroids_
 
-        ax.scatter(centroids[:, 0], centroids[:, 1], c='black', s=120, marker='x', label='Centroids')
-        ax.legend(loc='upper right')
+        label_str = 'Centroids' if show_cc_labels else '_nolegend_'
+        ax.scatter(centroids[:, 0], centroids[:, 1], c='black', s=120, marker='x', label=label_str)
+
+        if show_cc_labels:
+            ax.legend(loc='upper right')
+
         ax.set_title(self.clustering_plot_title())
 
-        plt.show(fig)
+        plt.show()
