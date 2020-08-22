@@ -50,7 +50,7 @@ if __name__ == '__main__':
                                                                    label_j,
                                                                    1,
                                                                    annealing_method='random',
-                                                                   annealing_vector_function='sigmoid',
+                                                                   annealing_weight_function='sigmoid',
                                                                    beta=6
                                                                    )
     annealed_centroid = centroid_to_be_annealed + annealing_vector
@@ -84,7 +84,7 @@ if __name__ == '__main__':
                                                                     label_j,
                                                                     1,
                                                                     annealing_method='max',
-                                                                    annealing_vector_function='log',
+                                                                    annealing_weight_function='log',
                                                                     beta=1.2
                                                                     )
     annealed_centroid = centroid_to_be_annealed + annealing_vector
@@ -118,7 +118,7 @@ if __name__ == '__main__':
                                                   label_j,
                                                   2,
                                                   annealing_method='min',
-                                                  annealing_vector_function='sq',
+                                                  annealing_weight_function='sq',
                                                   beta=1)
     annealed_centroid = centroid_to_be_annealed + annealing_vector
 
@@ -151,7 +151,7 @@ if __name__ == '__main__':
                                                   label_j,
                                                   2,
                                                   annealing_method='cluster_own',
-                                                  annealing_vector_function='recip',
+                                                  annealing_weight_function='recip',
                                                   beta=1.6)
     annealed_centroid = centroid_to_be_annealed + annealing_vector
 
@@ -185,7 +185,7 @@ if __name__ == '__main__':
                                                   label_j,
                                                   2,
                                                   annealing_method='cluster_other',
-                                                  annealing_vector_function='sigmoid',
+                                                  annealing_weight_function='sigmoid',
                                                   beta=1)
     annealed_centroid = centroid_to_be_annealed + annealing_vector
 
@@ -219,7 +219,7 @@ if __name__ == '__main__':
                                                   label_j,
                                                   1,
                                                   annealing_method='cluster_mean',
-                                                  annealing_vector_function='exp',
+                                                  annealing_weight_function='exp',
                                                   beta=1.1)
     annealed_centroid = centroid_to_be_annealed + annealing_vector
 
@@ -253,7 +253,7 @@ if __name__ == '__main__':
                                                                    label_j,
                                                                    2,
                                                                    annealing_method='centroid_split',
-                                                                   annealing_vector_function='sigmoid',
+                                                                   annealing_weight_function='sigmoid',
                                                                    beta=1)
     annealed_centroid = centroid_to_be_annealed + annealing_vector
 
@@ -286,7 +286,7 @@ if __name__ == '__main__':
                                                                    label_j,
                                                                    2,
                                                                    annealing_method='centroid_gather',
-                                                                   annealing_vector_function='log',
+                                                                   annealing_weight_function='log',
                                                                    beta=1.1)
     annealed_centroid = centroid_to_be_annealed + annealing_vector
 

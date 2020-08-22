@@ -326,10 +326,13 @@ def annealing_probability(it, annealing_prob_function, alpha=1):
     """
     :param it: Current iteration of the algorithm: integer
     :param annealing_prob_function: Decreasing function between 0 and 1 representing annealing probabilty: string
-    Possible values: 'exp', 'log', 'sq', 'sqrt', 'sigmoid', 'recip', 'flex'
+    Possible values: 'exp', 'log', 'sq', 'sqrt', 'sigmoid', 'recip', 'flex', 'fixed'
     :param alpha: Tunning parameter for annealing probability function: real number
     :return: Probability of acceptance the neighbouring solution (e.g moving of centroid in the specified direction)
     """
+
+    if alpha <= 0:
+        raise ValueError(f'Incorrect value for function hyperparameter: {alpha} (expected value > 0)')
 
     if annealing_prob_function == 'exp':
         return np.exp(np.divide(-it + 1, alpha))  # +1 when it=1 => 0
@@ -351,6 +354,13 @@ def annealing_probability(it, annealing_prob_function, alpha=1):
         return np.divide(1 + alpha, it + alpha)
     elif annealing_prob_function == 'flex':
         return np.divide(1, it ** alpha)
+    elif annealing_prob_function == 'fixed':
+        if type(it) == np.ndarray:
+            ret = np.zeros((it.shape[0],)) + alpha
+        else:
+            ret = alpha
+
+        return ret
     else:
         raise ValueError(f'Unknown annealing probability function: {annealing_prob_function}')
 
@@ -536,18 +546,15 @@ def calculate_annealing_vector(points,
 
     # Annealing vector is weighted with respect to annealing_weight_function
     if annealing_weight_function == 'fixed':
-        if beta > 1:
-            beta = 1
-
         weight = beta
-        annealing_vector = weight * (direction_point - centroid)
     else:
         weight = annealing_weight(it, annealing_weight_function, beta)
-        annealing_vector = weight * (direction_point - centroid)
 
-        if method == 'min' or (method == 'maxmin' and it % 2 == 0):
-            # In cthese cases centroid 'jumps' over directional point by the distance + w% of that distance
-            annealing_vector += (direction_point - centroid)
+    annealing_vector = weight * (direction_point - centroid)
+
+    if method == 'min' or (method == 'maxmin' and it % 2 == 0):
+        # In cthese cases centroid 'jumps' over directional point by the distance + w% of that distance
+        annealing_vector += (direction_point - centroid)
 
     return annealing_vector, direction_point, weight
 
@@ -634,7 +641,7 @@ def get_centroid_pairs(mean_centroids, annealed_centroids):
     return centroid_pairs
 
 
-class KMESAR:
+class KMESA:
     def __init__(self,
                  k_clusters=5,
                  init='random',
@@ -725,21 +732,25 @@ class KMESAR:
             self._legend_annealing_prob = r'$p = \frac{1 + \alpha}{it + \alpha}$'
         elif self.annealing_prob_function == 'flex':
             self._legend_annealing_prob = r'$p = \frac{1}{it^{\alpha}}$'
+        elif self.annealing_prob_function == 'fixed':
+            self._legend_annealing_prob = r'$p = \alpha$'
 
         if self.annealing_weight_function == 'exp':
-            self._legend_annealing_weight = r'$w = e^{\frac{-it}{\alpha}}$'
+            self._legend_annealing_weight = r'$w = e^{\frac{-it}{\beta}}$'
         elif self.annealing_weight_function == 'log':
-            self._legend_annealing_weight = r'$w = \frac{ln(1 + \alpha)}{ln(it + \alpha)}$'
+            self._legend_annealing_weight = r'$w = \frac{ln(1 + \beta)}{ln(it + \beta)}$'
         elif self.annealing_weight_function == 'sq':
-            self._legend_annealing_weight = r'$w = min(\frac{\alpha + it}{it^2}, 1)$'
+            self._legend_annealing_weight = r'$w = min(\frac{\beta + it}{it^2}, 1)$'
         elif self.annealing_weight_function == 'sqrt':
-            self._legend_annealing_weight = r'$w = \frac{\alpha}{\sqrt{it - 1} + \alpha}$'
+            self._legend_annealing_weight = r'$w = \frac{\beta}{\sqrt{it - 1} + \beta}$'
         elif self.annealing_weight_function == 'sigmoid':
-            self._legend_annealing_weight = r'$w = \frac{1}{1 + \frac{it - 1}{\alpha + e^{-it}}}$'
+            self._legend_annealing_weight = r'$w = \frac{1}{1 + \frac{it - 1}{\beta + e^{-it}}}$'
         elif self.annealing_weight_function == 'recip':
-            self._legend_annealing_weight = r'$w = \frac{1 + \alpha}{it + \alpha}$'
+            self._legend_annealing_weight = r'$w = \frac{1 + \beta}{it + \beta}$'
         elif self.annealing_weight_function == 'flex':
-            self._legend_annealing_weight = r'$w = \frac{1}{it^{\alpha}}$'
+            self._legend_annealing_weight = r'$w = \frac{1}{it^{\beta}}$'
+        elif self.annealing_weight_function == 'fixed':
+            self._legend_annealing_weight = r'$w = \beta$'
 
         self._colors = ['red', 'green', 'blue', 'yellow', 'brown', 'purple', 'm', 'cyan', 'indigo', 'forestgreen',
                         'plum', 'teal', 'orange', 'pink', 'lime', 'gold', 'lightcoral', 'cornflowerblue',
@@ -997,7 +1008,7 @@ class KMESAR:
         ax.scatter(init_centroids[:, 0], init_centroids[:, 1], c='black', s=120, marker='x', label=label_str)
 
         if self.simulated_annealing_on:
-            title = f'KMESAR initial state (iteration=0)'
+            title = f'KMESA initial state (iteration=0)'
         else:
             title = f'K-Means initial state (iteration=0)'
 
@@ -1075,17 +1086,17 @@ class KMESAR:
                                     linewidth=0.8)
 
             if self.annealing_tracking and self.ecr_tracking:
-                title = f'KMESAR: iteration={it}, n_annealings={n_annealings}, n_ecr={n_ecr}'
+                title = f'KMESA: iteration={it}, n_annealings={n_annealings}, n_ecr={n_ecr}'
             elif self.annealing_tracking and not self.ecr_tracking:
-                title = f'KMESAR: iteration={it}, n_annealings={n_annealings}'
+                title = f'KMESA: iteration={it}, n_annealings={n_annealings}'
             elif not self.annealing_tracking and self.ecr_tracking:
-                title = f'KMESAR: iteration={it}, n_ecr={n_ecr}'
+                title = f'KMESA: iteration={it}, n_ecr={n_ecr}'
             else:
                 title = f'K-Means: iteration={it}'
 
             ax.set_title(title)
 
-            if show_cc_labels or n_annealings > 0:
+            if show_cc_labels or (self.annealing_tracking and n_annealings > 0):
                 ax.legend(prop={'size': 7})
 
             subplot_ind += 1
@@ -1095,12 +1106,14 @@ class KMESAR:
             rand_int = np.random.randint(0, ii32.max)
 
             ind = self.best_result_index_ if reinit_iter == 'best' else reinit_iter
-            fname = f'KMESAR_tracking_best_reinit={ind}_v{rand_int}'
+            fname = f'KMESA_tracking_best_reinit={ind}_v{rand_int}'
         else:
             fname = out_file
 
         fig.tight_layout()
-        fig.savefig(fname)
+
+        if out_file is not None:
+            fig.savefig(fname)
 
         plt.show()
 
@@ -1120,6 +1133,107 @@ class KMESAR:
                 self._plot_specified_tracking_history(points, n_it, show_iter_mod, show_cc_labels, out_file)
         else:
             self._plot_specified_tracking_history(points, reinit_iter, show_iter_mod, show_cc_labels, out_file)
+
+    def plot_iteration(self, points, reinit_iter='best', it=1, show_cc_labels=True, out_file=None):
+        if reinit_iter == 'best':
+            th = self.tracking_history_[self.best_result_index_]
+        else:
+            th = self.tracking_history_[reinit_iter]
+
+        centroids = th['centroids'][it]
+        labels = th['labels'][it]
+
+        fig = plt.figure(figsize=(6, 6))
+        ax = fig.add_subplot(111)
+
+        for cluster_label in range(self.k_clusters):
+            indices = np.where(labels == cluster_label)
+            cluster_subsample = points[indices]
+
+            label_str = f'Cluster {cluster_label}' if show_cc_labels else '_nolegend_'
+            ax.scatter(cluster_subsample[:, 0], cluster_subsample[:, 1],
+                       c=self._colors[cluster_label], s=8, label=label_str)
+
+        label_str = 'Centroids' if show_cc_labels else '_nolegend_'
+        ax.scatter(centroids[:, 0], centroids[:, 1], c='black', s=120, marker='x', label=label_str)
+
+        if self.annealing_tracking:
+            n_annealings = th['n_annealings'][it]
+            centroid_pairs = th['annealing_history'][it]
+            annealing_weights = th['annealing_weights'][it]
+
+            if centroid_pairs is not None:  # and annealing_weights is not None
+                labeled_once = False
+                for centroid_pair, annealing_weight in zip(centroid_pairs, annealing_weights):
+                    mean_centroid = centroid_pair[0]
+                    annealed_centroid = centroid_pair[1]
+                    weight_string = f'w = {annealing_weight : .3}'
+
+                    if not labeled_once:
+                        ax.plot([mean_centroid[0], annealed_centroid[0]],
+                                [mean_centroid[1], annealed_centroid[1]],
+                                c='dimgray',
+                                linewidth=0.8,
+                                label=f'Annealing trigger, ' + weight_string)
+                        labeled_once = True
+                    else:
+                        ax.plot([mean_centroid[0], annealed_centroid[0]],
+                                [mean_centroid[1], annealed_centroid[1]],
+                                c='dimgray',
+                                linewidth=0.8)
+
+        if self.ecr_tracking:
+            centroid_pairs = th['ecr_history'][it]
+            n_ecr = th['n_ecr'][it]
+
+            if centroid_pairs is not None:
+                labeled_once = False
+                for centroid_pair in centroid_pairs:
+                    annealed_centroid = centroid_pair[0]
+                    ecr_centroid = centroid_pair[1]
+
+                    if not labeled_once:
+                        ax.plot([annealed_centroid[0], ecr_centroid[0]],
+                                [annealed_centroid[1], ecr_centroid[1]],
+                                c='rosybrown',
+                                linewidth=0.8,
+                                label='ECR trigger')
+                        labeled_once = True
+                    else:
+                        ax.plot([annealed_centroid[0], ecr_centroid[0]],
+                                [annealed_centroid[1], ecr_centroid[1]],
+                                c='rosybrown',
+                                linewidth=0.8)
+
+        if self.annealing_tracking and self.ecr_tracking:
+            title = f'KMESA: iteration={it}, n_annealings={n_annealings}, n_ecr={n_ecr}'
+        elif self.annealing_tracking and not self.ecr_tracking:
+            title = f'KMESA: iteration={it}, n_annealings={n_annealings}'
+        elif not self.annealing_tracking and self.ecr_tracking:
+            title = f'KMESA: iteration={it}, n_ecr={n_ecr}'
+        else:
+            title = f'K-Means: iteration={it}'
+
+        ax.set_title(title)
+
+        if show_cc_labels or (self.annealing_tracking and n_annealings > 0):
+            ax.legend(prop={'size': 7})
+
+        if out_file == '_initial_':
+            ii32 = np.iinfo(np.int32)
+            rand_int = np.random.randint(0, ii32.max)
+
+            if self.annealing_tracking:
+                fname = f'KMESA_it={it}_a_method={self.annealing_prob_function}_v{rand_int}'
+            else:
+                fname = f'K-Means_it={it}_v{rand_int}'
+        else:
+            fname = out_file
+
+        if out_file is not None:
+            fig.savefig(fname)
+
+        plt.show()
 
     def plot_annealing_prob_function(self, n_iter=30, color='teal'):
         x = np.arange(1, n_iter + 1, dtype=np.int16)
@@ -1179,7 +1293,7 @@ class KMESAR:
         plt.show()
 
     def algorithm_details(self):
-        init_method_ignored = f' (ignored)\n' if self.init_centroids is not None else '\n'
+        init_method_ignored = ' (ignored)\n' if self.init_centroids is not None else '\n'
 
         if self.tracking_scaler is None:
             scaler_type = 'None'
@@ -1188,25 +1302,40 @@ class KMESAR:
             dot_index = scaler_type_str.rindex('.')
             scaler_type = scaler_type_str[dot_index + 1: -2]
 
-        info = '--------------- Algorithm details ---------------\n' + \
-               f'    * Number of clusters (k): {self.k_clusters}\n' + \
-               f'    * Centroid initialization method: {self.init}' + init_method_ignored + \
-               f'    * Initial centroids (specified): {self.init_centroids is not None}\n' + \
-               f'    * Number of initialization repetition: {self.n_init}\n' + \
-               f'    * Maximum iterations: {self.max_iter}\n' + \
-               f'    * Convergence tolerance: {self.tol}\n' + \
-               f'    * Empty clusters resolution method: {self.ecr_method}\n' + \
-               f'    * Simulated annealing on: {self.simulated_annealing_on}\n' + \
-               f'    * Annealing method: {self.annealing_method}\n' + \
-               f'    * Annealing probability function: {self.annealing_prob_function}\n' + \
-               f'    * Annealing probability alpha: {self.alpha}\n' + \
-               f'    * Annealing weight function: {self.annealing_weight_function}\n' + \
-               f'    * Annealing weight beta: {self.beta}\n' + \
-               f'    * Convergence tracking: {self.convergence_tracking}\n' + \
-               f'    * Annealing tracking: {self.annealing_tracking}\n' + \
-               f'    * ECR tracking: {self.ecr_tracking}\n' + \
-               f'    * Tracking scaler: {scaler_type}\n' + \
-               f'-------------------------------------------------'
+        if not self.simulated_annealing_on:
+            info = '--------------- Algorithm details ---------------\n' + \
+                   f'    * Type: Standard K-Means\n' + \
+                   f'    * Number of clusters (k): {self.k_clusters}\n' + \
+                   f'    * Centroid initialization method: {self.init}' + init_method_ignored + \
+                   f'    * Initial centroids (specified): {self.init_centroids is not None}\n' + \
+                   f'    * Number of initialization repetition: {self.n_init}\n' + \
+                   f'    * Maximum iterations: {self.max_iter}\n' + \
+                   f'    * Convergence tolerance: {self.tol}\n' + \
+                   f'    * Empty clusters resolution method: {self.ecr_method}\n' + \
+                   f'    * Convergence tracking: {self.convergence_tracking}\n' + \
+                   f'    * ECR tracking: {self.ecr_tracking}\n' + \
+                   f'    * Tracking scaler: {scaler_type}\n' + \
+                   f'-------------------------------------------------'
+        else:
+            info = '--------------- Algorithm details ---------------\n' + \
+                   f'    * Type: KMESA\n' + \
+                   f'    * Number of clusters (k): {self.k_clusters}\n' + \
+                   f'    * Centroid initialization method: {self.init}' + init_method_ignored + \
+                   f'    * Initial centroids (specified): {self.init_centroids is not None}\n' + \
+                   f'    * Number of initialization repetition: {self.n_init}\n' + \
+                   f'    * Maximum iterations: {self.max_iter}\n' + \
+                   f'    * Convergence tolerance: {self.tol}\n' + \
+                   f'    * Empty clusters resolution method: {self.ecr_method}\n' + \
+                   f'    * Annealing method: {self.annealing_method}\n' + \
+                   f'    * Annealing probability function: {self.annealing_prob_function}\n' + \
+                   f'    * Annealing probability alpha: {self.alpha}\n' + \
+                   f'    * Annealing weight function: {self.annealing_weight_function}\n' + \
+                   f'    * Annealing weight beta: {self.beta}\n' + \
+                   f'    * Convergence tracking: {self.convergence_tracking}\n' + \
+                   f'    * Annealing tracking: {self.annealing_tracking}\n' + \
+                   f'    * ECR tracking: {self.ecr_tracking}\n' + \
+                   f'    * Tracking scaler: {scaler_type}\n' + \
+                   f'-------------------------------------------------'
 
         return info
 
@@ -1218,13 +1347,21 @@ class KMESAR:
             print('Run algorithm before checking clustering information.')
             return
 
-        info = '------------- KMESAR clustering -------------\n' + \
-               f'    * Iterations before convergence: {self.n_iter_}\n' + \
-               f'    * Total empty cluster resolutions: {self.total_ecr_}\n' + \
-               f'    * Total annealings: {self.total_annealings_}\n' + \
-               f'    * Sum of squared error: {self.inertia_ : .3}\n' + \
-               f'    * Time elapsed: {self.time_info_}\n' + \
-               f' ---------------------------------------------'
+        if not self.simulated_annealing_on:
+            info = '------------- K-Means clustering -------------\n' + \
+                   f'    * Iterations before convergence: {self.n_iter_}\n' + \
+                   f'    * Total empty cluster resolutions: {self.total_ecr_}\n' + \
+                   f'    * Sum of squared error: {self.inertia_ : .3}\n' + \
+                   f'    * Time elapsed: {self.time_info_}\n' + \
+                   f' ---------------------------------------------'
+        else:
+            info = '------------- KMESA clustering -------------\n' + \
+                   f'    * Iterations before convergence: {self.n_iter_}\n' + \
+                   f'    * Total empty cluster resolutions: {self.total_ecr_}\n' + \
+                   f'    * Total annealings: {self.total_annealings_}\n' + \
+                   f'    * Sum of squared error: {self.inertia_ : .3}\n' + \
+                   f'    * Time elapsed: {self.time_info_}\n' + \
+                   f' ---------------------------------------------'
 
         return info
 
@@ -1237,13 +1374,13 @@ class KMESAR:
             return
 
         if self.simulated_annealing_on:
-            title = f'KMESAR: n_iter={self.n_iter_}, annealings={self.total_annealings_}, SSE={self.inertia_ : .3}'
+            title = f'KMESA: n_iter={self.n_iter_}, annealings={self.total_annealings_}, SSE={self.inertia_ : .3}'
         else:
             title = f'K-Means: n_iter={self.n_iter_}, SSE={self.inertia_ : .3}'
 
         return title
 
-    def plot_clustered_data(self, points, colors=None, show_cc_labels=True):
+    def plot_clustered_data(self, points, s=10, colors=None, show_cc_labels=True, out_file='_initial_'):
         if self.labels_ is None:
             print('Run algorithm before plotting clustered dataset.')
             return
@@ -1257,16 +1394,30 @@ class KMESAR:
             cluster = points[np.where(self.labels_ == label)]
 
             label_str = f'Cluster {label}' if show_cc_labels else '_nolegend_'
-            ax.scatter(cluster[:, 0], cluster[:, 1], c=colors[label], s=10, label=label_str)
+            ax.scatter(cluster[:, 0], cluster[:, 1], c=colors[label], s=s, label=label_str)
 
         centroids = self.centroids_ if self.tracking_scaler is None else self.scaled_centroids_
 
         label_str = 'Centroids' if show_cc_labels else '_nolegend_'
-        ax.scatter(centroids[:, 0], centroids[:, 1], c='black', s=120, marker='x', label=label_str)
+        ax.scatter(centroids[:, 0], centroids[:, 1], c='black', s=200, marker='x', label=label_str)
 
         if show_cc_labels:
             ax.legend(loc='upper right')
 
         ax.set_title(self.clustering_plot_title())
+
+        if out_file == '_initial_':
+            ii32 = np.iinfo(np.int32)
+            rand_int = np.random.randint(0, ii32.max)
+
+            if self.annealing_tracking:
+                fname = f'KMESA_a_method={self.annealing_prob_function}_v{rand_int}'
+            else:
+                fname = f'K-Means_v{rand_int}'
+        else:
+            fname = out_file
+
+        if out_file is not None:
+            fig.savefig(fname)
 
         plt.show()

@@ -126,7 +126,7 @@ def plot_prob_function(prob_function, alpha, n_iter=15, color='blue'):
     plt.show()
 
 
-def plot_all_annealing_prob_functions(n_iter=20, alpha=1):
+def plot_all_annealing_prob_functions(n_iter=20, alpha=1, nolabels=False):
     """
     :param n_iter: Number of iterations on x-axis: integer
     :param alpha: Hyperparameter: float
@@ -158,7 +158,8 @@ def plot_all_annealing_prob_functions(n_iter=20, alpha=1):
 
     colors = ['blue', 'green', 'red', 'yellow', 'cyan', 'm', 'darkorange', 'teal', 'lightcoral', 'crimson', 'plum']
     for i in range(n_func):
-        plt.plot(x, y[i], c=colors[i], label=labels[i])
+        label = '_nolegend_' if nolabels else labels[i]
+        plt.plot(x, y[i], c=colors[i], label=label)
 
     plt.xlim(0, n_iter + 1)
     plt.ylim(0, 1.1)
