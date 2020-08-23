@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from clustering.kmesar import *
+from clustering.kmesa import *
 from clustering.utils import load_dataset_3_clusters_separate
 
 if __name__ == '__main__':

@@ -3,6 +3,7 @@ import numpy.linalg as la
 import pandas as pd
 import copy
 import matplotlib.pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
 import time
 from clustering.utils import time_elapsed
 
@@ -243,8 +244,6 @@ def initialize_centroids_random(points, k_centroids, bounds=None):
     This function may produce empty clusters. It's neccessary to call empty_clusters_resolution after this function.
     :param points: Points from training set to be clustered: numpy array of shape (m, n)
     :param k_centroids: Number of centroids to be initialized: integer
-    :param ecr_method: Method that determines how the empty clusters are resolved: string
-    Possible values: 'random', 'max', 'sse'
     :param bounds: Tupple of lower and upper bounds of training set. If None, they are calculated.
     :return: Initial centroids: numpy array of shape (k, n)
     """
@@ -973,6 +972,12 @@ class KMESA:
         self.scaled_centroids_ = scaled_centroids
 
     def _plot_specified_tracking_history(self, points, reinit_iter, show_iter_mod, show_cc_labels, out_file):
+        ndim = points.shape[1]
+
+        if ndim <= 1 or ndim > 3:
+            print(f'Tracking convergence for data with ndim != [2, 3] unavailable.')
+            return
+
         if reinit_iter == 'best':
             th = self.tracking_history_[self.best_result_index_]
         else:
@@ -994,18 +999,30 @@ class KMESA:
         init_centroids = th['centroids'][0]
         init_labels = th['labels'][0]
 
-        ax = fig.add_subplot(n_rows, n_cols, 1)
+        if ndim == 2:
+            ax = fig.add_subplot(n_rows, n_cols, 1)
+        else:
+            ax = fig.add_subplot(n_rows, n_cols, 1, projection='3d')
 
         for cluster_label in range(self.k_clusters):
             indices = np.where(init_labels == cluster_label)
             cluster_subsample = points[indices]
 
             label_str = f'Cluster {cluster_label}' if show_cc_labels else '_nolegend_'
-            ax.scatter(cluster_subsample[:, 0], cluster_subsample[:, 1],
+            if ndim == 2:
+                ax.scatter(cluster_subsample[:, 0], cluster_subsample[:, 1],
+                       c=self._colors[cluster_label], s=8, label=label_str)
+            else:
+                ax.scatter(cluster_subsample[:, 0], cluster_subsample[:, 1], cluster_subsample[:, 2],
                        c=self._colors[cluster_label], s=8, label=label_str)
 
-        label_str = 'Centroids' if show_cc_labels else '_nolegend_'
-        ax.scatter(init_centroids[:, 0], init_centroids[:, 1], c='black', s=120, marker='x', label=label_str)
+        label_str = 'Initial centroids' if show_cc_labels else '_nolegend_'
+        if ndim == 2:
+            ax.scatter(init_centroids[:, 0], init_centroids[:, 1],
+                       c='black', s=120, marker='x', label=label_str)
+        else:
+            ax.scatter(init_centroids[:, 0], init_centroids[:, 1], init_centroids[:, 2],
+                       c='black', s=120, marker='x', label=label_str)
 
         if self.simulated_annealing_on:
             title = f'KMESA initial state (iteration=0)'
@@ -1024,18 +1041,30 @@ class KMESA:
             centroids = th['centroids'][it]
             labels = th['labels'][it]
 
-            ax = fig.add_subplot(n_rows, n_cols, subplot_ind)
+            if ndim == 2:
+                ax = fig.add_subplot(n_rows, n_cols, subplot_ind)
+            else:
+                ax = fig.add_subplot(n_rows, n_cols, subplot_ind, projection='3d')
 
             for cluster_label in range(self.k_clusters):
                 indices = np.where(labels == cluster_label)
                 cluster_subsample = points[indices]
 
                 label_str = f'Cluster {cluster_label}' if show_cc_labels else '_nolegend_'
-                ax.scatter(cluster_subsample[:, 0], cluster_subsample[:, 1],
-                           c=self._colors[cluster_label], s=8, label=label_str)
+                if ndim == 2:
+                    ax.scatter(cluster_subsample[:, 0], cluster_subsample[:, 1],
+                               c=self._colors[cluster_label], s=8, label=label_str)
+                else:
+                    ax.scatter(cluster_subsample[:, 0], cluster_subsample[:, 1], cluster_subsample[:, 2],
+                               c=self._colors[cluster_label], s=8, label=label_str)
 
             label_str = 'Centroids' if show_cc_labels else '_nolegend_'
-            ax.scatter(centroids[:, 0], centroids[:, 1], c='black', s=120, marker='x', label=label_str)
+            if ndim == 2:
+                ax.scatter(centroids[:, 0], centroids[:, 1],
+                           c='black', s=120, marker='x', label=label_str)
+            else:
+                ax.scatter(centroids[:, 0], centroids[:, 1], centroids[:, 2],
+                           c='black', s=120, marker='x', label=label_str)
 
             if self.annealing_tracking:
                 n_annealings = th['n_annealings'][it]
@@ -1050,17 +1079,33 @@ class KMESA:
                         weight_string = f'w = {annealing_weight : .3}'
 
                         if not labeled_once:
-                            ax.plot([mean_centroid[0], annealed_centroid[0]],
-                                    [mean_centroid[1], annealed_centroid[1]],
-                                    c='dimgray',
-                                    linewidth=0.8,
-                                    label=f'Annealing trigger, ' + weight_string)
+                            if ndim == 2:
+                                ax.plot([mean_centroid[0], annealed_centroid[0]],
+                                        [mean_centroid[1], annealed_centroid[1]],
+                                        c='dimgray',
+                                        linewidth=0.8,
+                                        label=f'Annealing trigger, ' + weight_string)
+                            else:
+                                ax.plot([mean_centroid[0], annealed_centroid[0]],
+                                        [mean_centroid[1], annealed_centroid[1]],
+                                        [mean_centroid[2], annealed_centroid[2]],
+                                        c='dimgray',
+                                        linewidth=0.8,
+                                        label=f'Annealing trigger, ' + weight_string)
+
                             labeled_once = True
                         else:
-                            ax.plot([mean_centroid[0], annealed_centroid[0]],
-                                    [mean_centroid[1], annealed_centroid[1]],
-                                    c='dimgray',
-                                    linewidth=0.8)
+                            if ndim == 2:
+                                ax.plot([mean_centroid[0], annealed_centroid[0]],
+                                        [mean_centroid[1], annealed_centroid[1]],
+                                        c='dimgray',
+                                        linewidth=0.8)
+                            else:
+                                ax.plot([mean_centroid[0], annealed_centroid[0]],
+                                        [mean_centroid[1], annealed_centroid[1]],
+                                        [mean_centroid[2], annealed_centroid[2]],
+                                        c='dimgray',
+                                        linewidth=0.8)
 
             if self.ecr_tracking:
                 centroid_pairs = th['ecr_history'][it]
@@ -1073,17 +1118,33 @@ class KMESA:
                         ecr_centroid = centroid_pair[1]
 
                         if not labeled_once:
-                            ax.plot([annealed_centroid[0], ecr_centroid[0]],
-                                    [annealed_centroid[1], ecr_centroid[1]],
-                                    c='rosybrown',
-                                    linewidth=0.8,
-                                    label='ECR trigger')
+                            if ndim == 2:
+                                ax.plot([annealed_centroid[0], ecr_centroid[0]],
+                                        [annealed_centroid[1], ecr_centroid[1]],
+                                        c='rosybrown',
+                                        linewidth=0.8,
+                                        label='ECR trigger')
+                            else:
+                                ax.plot([annealed_centroid[0], ecr_centroid[0]],
+                                        [annealed_centroid[1], ecr_centroid[1]],
+                                        [annealed_centroid[2], ecr_centroid[2]],
+                                        c='rosybrown',
+                                        linewidth=0.8,
+                                        label='ECR trigger')
+
                             labeled_once = True
                         else:
-                            ax.plot([annealed_centroid[0], ecr_centroid[0]],
-                                    [annealed_centroid[1], ecr_centroid[1]],
-                                    c='rosybrown',
-                                    linewidth=0.8)
+                            if ndim == 2:
+                                ax.plot([annealed_centroid[0], ecr_centroid[0]],
+                                        [annealed_centroid[1], ecr_centroid[1]],
+                                        c='rosybrown',
+                                        linewidth=0.8)
+                            else:
+                                ax.plot([annealed_centroid[0], ecr_centroid[0]],
+                                        [annealed_centroid[1], ecr_centroid[1]],
+                                        [annealed_centroid[2], ecr_centroid[2]],
+                                        c='rosybrown',
+                                        linewidth=0.8)
 
             if self.annealing_tracking and self.ecr_tracking:
                 title = f'KMESA: iteration={it}, n_annealings={n_annealings}, n_ecr={n_ecr}'
@@ -1096,7 +1157,7 @@ class KMESA:
 
             ax.set_title(title)
 
-            if show_cc_labels or (self.annealing_tracking and n_annealings > 0):
+            if show_cc_labels or (self.annealing_tracking and n_annealings > 0) or (self.ecr_tracking and n_ecr > 0):
                 ax.legend(prop={'size': 7})
 
             subplot_ind += 1
@@ -1135,6 +1196,12 @@ class KMESA:
             self._plot_specified_tracking_history(points, reinit_iter, show_iter_mod, show_cc_labels, out_file)
 
     def plot_iteration(self, points, reinit_iter='best', it=1, show_cc_labels=True, out_file=None):
+        ndim = points.shape[1]
+
+        if ndim <= 1 or ndim > 3:
+            print(f'Tracking convergence for data with ndim != [2, 3] unavailable.')
+            return
+
         if reinit_iter == 'best':
             th = self.tracking_history_[self.best_result_index_]
         else:
@@ -1144,18 +1211,32 @@ class KMESA:
         labels = th['labels'][it]
 
         fig = plt.figure(figsize=(6, 6))
-        ax = fig.add_subplot(111)
+
+        if ndim == 2:
+            ax = fig.add_subplot(111)
+        else:
+            ax = fig.add_subplot(111, projection='3d')
 
         for cluster_label in range(self.k_clusters):
             indices = np.where(labels == cluster_label)
             cluster_subsample = points[indices]
 
             label_str = f'Cluster {cluster_label}' if show_cc_labels else '_nolegend_'
-            ax.scatter(cluster_subsample[:, 0], cluster_subsample[:, 1],
-                       c=self._colors[cluster_label], s=8, label=label_str)
+            if ndim == 2:
+                ax.scatter(cluster_subsample[:, 0], cluster_subsample[:, 1],
+                           c=self._colors[cluster_label], s=8, label=label_str)
+            else:
+                ax.scatter(cluster_subsample[:, 0], cluster_subsample[:, 1], cluster_subsample[:, 2],
+                           c=self._colors[cluster_label], s=8, label=label_str)
 
         label_str = 'Centroids' if show_cc_labels else '_nolegend_'
-        ax.scatter(centroids[:, 0], centroids[:, 1], c='black', s=120, marker='x', label=label_str)
+        if ndim == 2:
+            ax.scatter(centroids[:, 0], centroids[:, 1],
+                       c='black', s=120, marker='x', label=label_str)
+        else:
+            ax.scatter(centroids[:, 0], centroids[:, 1], centroids[:, 2],
+                       c='black', s=120, marker='x', label=label_str)
+
 
         if self.annealing_tracking:
             n_annealings = th['n_annealings'][it]
@@ -1170,17 +1251,33 @@ class KMESA:
                     weight_string = f'w = {annealing_weight : .3}'
 
                     if not labeled_once:
-                        ax.plot([mean_centroid[0], annealed_centroid[0]],
-                                [mean_centroid[1], annealed_centroid[1]],
-                                c='dimgray',
-                                linewidth=0.8,
-                                label=f'Annealing trigger, ' + weight_string)
+                        if ndim == 2:
+                            ax.plot([mean_centroid[0], annealed_centroid[0]],
+                                    [mean_centroid[1], annealed_centroid[1]],
+                                    c='dimgray',
+                                    linewidth=0.8,
+                                    label=f'Annealing trigger, ' + weight_string)
+                        else:
+                            ax.plot([mean_centroid[0], annealed_centroid[0]],
+                                    [mean_centroid[1], annealed_centroid[1]],
+                                    [mean_centroid[2], annealed_centroid[2]],
+                                    c='dimgray',
+                                    linewidth=0.8,
+                                    label=f'Annealing trigger, ' + weight_string)
+
                         labeled_once = True
                     else:
-                        ax.plot([mean_centroid[0], annealed_centroid[0]],
-                                [mean_centroid[1], annealed_centroid[1]],
-                                c='dimgray',
-                                linewidth=0.8)
+                        if ndim == 2:
+                            ax.plot([mean_centroid[0], annealed_centroid[0]],
+                                    [mean_centroid[1], annealed_centroid[1]],
+                                    c='dimgray',
+                                    linewidth=0.8)
+                        else:
+                            ax.plot([mean_centroid[0], annealed_centroid[0]],
+                                    [mean_centroid[1], annealed_centroid[1]],
+                                    [mean_centroid[2], annealed_centroid[2]],
+                                    c='dimgray',
+                                    linewidth=0.8)
 
         if self.ecr_tracking:
             centroid_pairs = th['ecr_history'][it]
@@ -1193,17 +1290,33 @@ class KMESA:
                     ecr_centroid = centroid_pair[1]
 
                     if not labeled_once:
-                        ax.plot([annealed_centroid[0], ecr_centroid[0]],
-                                [annealed_centroid[1], ecr_centroid[1]],
-                                c='rosybrown',
-                                linewidth=0.8,
-                                label='ECR trigger')
+                        if ndim == 2:
+                            ax.plot([annealed_centroid[0], ecr_centroid[0]],
+                                    [annealed_centroid[1], ecr_centroid[1]],
+                                    c='rosybrown',
+                                    linewidth=0.8,
+                                    label='ECR trigger')
+                        else:
+                            ax.plot([annealed_centroid[0], ecr_centroid[0]],
+                                    [annealed_centroid[1], ecr_centroid[1]],
+                                    [annealed_centroid[2], ecr_centroid[2]],
+                                    c='rosybrown',
+                                    linewidth=0.8,
+                                    label='ECR trigger')
+
                         labeled_once = True
                     else:
-                        ax.plot([annealed_centroid[0], ecr_centroid[0]],
-                                [annealed_centroid[1], ecr_centroid[1]],
-                                c='rosybrown',
-                                linewidth=0.8)
+                        if ndim == 2:
+                            ax.plot([annealed_centroid[0], ecr_centroid[0]],
+                                    [annealed_centroid[1], ecr_centroid[1]],
+                                    c='rosybrown',
+                                    linewidth=0.8)
+                        else:
+                            ax.plot([annealed_centroid[0], ecr_centroid[0]],
+                                    [annealed_centroid[1], ecr_centroid[1]],
+                                    [annealed_centroid[2], ecr_centroid[2]],
+                                    c='rosybrown',
+                                    linewidth=0.8)
 
         if self.annealing_tracking and self.ecr_tracking:
             title = f'KMESA: iteration={it}, n_annealings={n_annealings}, n_ecr={n_ecr}'
@@ -1216,7 +1329,7 @@ class KMESA:
 
         ax.set_title(title)
 
-        if show_cc_labels or (self.annealing_tracking and n_annealings > 0):
+        if show_cc_labels or (self.annealing_tracking and n_annealings > 0) or (self.ecr_tracking and n_ecr > 0):
             ax.legend(prop={'size': 7})
 
         if out_file == '_initial_':
@@ -1229,6 +1342,167 @@ class KMESA:
                 fname = f'K-Means_it={it}_v{rand_int}'
         else:
             fname = out_file
+
+        if out_file is not None:
+            fig.savefig(fname)
+
+        plt.show()
+
+    def plot_iterations(self, points, reinit_iter='best', iterations=range(11), show_cc_labels=True, out_file=None):
+        ndim = points.shape[1]
+
+        if ndim <= 1 or ndim > 3:
+            print(f'Tracking convergence for data with ndim != [2, 3] unavailable.')
+            return
+
+        if reinit_iter == 'best':
+            th = self.tracking_history_[self.best_result_index_]
+        else:
+            th = self.tracking_history_[reinit_iter]
+
+        iters_len = len(iterations)
+        n_rows = iters_len // 2 if iters_len % 2 == 0 else iters_len // 2 + 1
+        n_cols = 2
+
+        fig = plt.figure(figsize=(12, 5 * n_rows))
+        subplot_ind = 1
+
+        # Plot every specified iteration
+        for it in iterations:
+            centroids = th['centroids'][it]
+            labels = th['labels'][it]
+
+            if ndim == 2:
+                ax = fig.add_subplot(n_rows, n_cols, subplot_ind)
+            else:
+                ax = fig.add_subplot(n_rows, n_cols, subplot_ind, projection='3d')
+
+            for cluster_label in range(self.k_clusters):
+                indices = np.where(labels == cluster_label)
+                cluster_subsample = points[indices]
+
+                label_str = f'Cluster {cluster_label}' if show_cc_labels else '_nolegend_'
+                if ndim == 2:
+                    ax.scatter(cluster_subsample[:, 0], cluster_subsample[:, 1],
+                               c=self._colors[cluster_label], s=8, label=label_str)
+                else:
+                    ax.scatter(cluster_subsample[:, 0], cluster_subsample[:, 1], cluster_subsample[:, 2],
+                               c=self._colors[cluster_label], s=8, label=label_str)
+
+            label_str = 'Centroids' if show_cc_labels else '_nolegend_'
+            if ndim == 2:
+                ax.scatter(centroids[:, 0], centroids[:, 1],
+                           c='black', s=120, marker='x', label=label_str)
+            else:
+                ax.scatter(centroids[:, 0], centroids[:, 1], centroids[:, 2],
+                           c='black', s=120, marker='x', label=label_str)
+
+            if self.annealing_tracking:
+                n_annealings = th['n_annealings'][it]
+                centroid_pairs = th['annealing_history'][it]
+                annealing_weights = th['annealing_weights'][it]
+
+                if centroid_pairs is not None:  # and annealing_weights is not None
+                    labeled_once = False
+                    for centroid_pair, annealing_weight in zip(centroid_pairs, annealing_weights):
+                        mean_centroid = centroid_pair[0]
+                        annealed_centroid = centroid_pair[1]
+                        weight_string = f'w = {annealing_weight : .3}'
+
+                        if not labeled_once:
+                            if ndim == 2:
+                                ax.plot([mean_centroid[0], annealed_centroid[0]],
+                                        [mean_centroid[1], annealed_centroid[1]],
+                                        c='dimgray',
+                                        linewidth=0.8,
+                                        label=f'Annealing trigger, ' + weight_string)
+                            else:
+                                ax.plot([mean_centroid[0], annealed_centroid[0]],
+                                        [mean_centroid[1], annealed_centroid[1]],
+                                        [mean_centroid[2], annealed_centroid[2]],
+                                        c='dimgray',
+                                        linewidth=0.8,
+                                        label=f'Annealing trigger, ' + weight_string)
+
+                            labeled_once = True
+                        else:
+                            if ndim == 2:
+                                ax.plot([mean_centroid[0], annealed_centroid[0]],
+                                        [mean_centroid[1], annealed_centroid[1]],
+                                        c='dimgray',
+                                        linewidth=0.8)
+                            else:
+                                ax.plot([mean_centroid[0], annealed_centroid[0]],
+                                        [mean_centroid[1], annealed_centroid[1]],
+                                        [mean_centroid[2], annealed_centroid[2]],
+                                        c='dimgray',
+                                        linewidth=0.8)
+
+            if self.ecr_tracking:
+                centroid_pairs = th['ecr_history'][it]
+                n_ecr = th['n_ecr'][it]
+
+                if centroid_pairs is not None:
+                    labeled_once = False
+                    for centroid_pair in centroid_pairs:
+                        annealed_centroid = centroid_pair[0]
+                        ecr_centroid = centroid_pair[1]
+
+                        if not labeled_once:
+                            if ndim == 2:
+                                ax.plot([annealed_centroid[0], ecr_centroid[0]],
+                                        [annealed_centroid[1], ecr_centroid[1]],
+                                        c='rosybrown',
+                                        linewidth=0.8,
+                                        label='ECR trigger')
+                            else:
+                                ax.plot([annealed_centroid[0], ecr_centroid[0]],
+                                        [annealed_centroid[1], ecr_centroid[1]],
+                                        [annealed_centroid[2], ecr_centroid[2]],
+                                        c='rosybrown',
+                                        linewidth=0.8,
+                                        label='ECR trigger')
+
+                            labeled_once = True
+                        else:
+                            if ndim == 2:
+                                ax.plot([annealed_centroid[0], ecr_centroid[0]],
+                                        [annealed_centroid[1], ecr_centroid[1]],
+                                        c='rosybrown',
+                                        linewidth=0.8)
+                            else:
+                                ax.plot([annealed_centroid[0], ecr_centroid[0]],
+                                        [annealed_centroid[1], ecr_centroid[1]],
+                                        [annealed_centroid[2], ecr_centroid[2]],
+                                        c='rosybrown',
+                                        linewidth=0.8)
+
+            if self.annealing_tracking and self.ecr_tracking:
+                title = f'KMESA: iteration={it}, n_annealings={n_annealings}, n_ecr={n_ecr}'
+            elif self.annealing_tracking and not self.ecr_tracking:
+                title = f'KMESA: iteration={it}, n_annealings={n_annealings}'
+            elif not self.annealing_tracking and self.ecr_tracking:
+                title = f'KMESA: iteration={it}, n_ecr={n_ecr}'
+            else:
+                title = f'K-Means: iteration={it}'
+
+            ax.set_title(title)
+
+            if show_cc_labels or (self.annealing_tracking and n_annealings > 0) or (self.ecr_tracking and n_ecr > 0):
+                ax.legend(prop={'size': 7})
+
+            subplot_ind += 1
+
+        if out_file == '_initial_':
+            ii32 = np.iinfo(np.int32)
+            rand_int = np.random.randint(0, ii32.max)
+
+            ind = self.best_result_index_ if reinit_iter == 'best' else reinit_iter
+            fname = f'KMESA_tracking_best_reinit={ind}_v{rand_int}'
+        else:
+            fname = out_file
+
+        fig.tight_layout()
 
         if out_file is not None:
             fig.savefig(fname)
@@ -1385,21 +1659,42 @@ class KMESA:
             print('Run algorithm before plotting clustered dataset.')
             return
 
+        ndim = points.shape[1]
+
+        if ndim <= 1 or ndim > 3:
+            print(f'Tracking convergence for data with ndim != [2, 3] unavailable.')
+            return
+
         if colors is None:
             colors = self._colors
 
-        fig, ax = plt.subplots(figsize=(10, 10))
+        fig = plt.figure(figsize=(6, 6))
+
+        if ndim == 2:
+            ax = fig.add_subplot(111)
+        else:
+            ax = fig.add_subplot(111, projection='3d')
 
         for label in range(self.k_clusters):
             cluster = points[np.where(self.labels_ == label)]
 
             label_str = f'Cluster {label}' if show_cc_labels else '_nolegend_'
-            ax.scatter(cluster[:, 0], cluster[:, 1], c=colors[label], s=s, label=label_str)
+            if ndim == 2:
+                ax.scatter(cluster[:, 0], cluster[:, 1],
+                           c=colors[label], s=s, label=label_str)
+            else:
+                ax.scatter(cluster[:, 0], cluster[:, 1], cluster[:, 2],
+                           c=colors[label], s=s, label=label_str)
 
         centroids = self.centroids_ if self.tracking_scaler is None else self.scaled_centroids_
 
         label_str = 'Centroids' if show_cc_labels else '_nolegend_'
-        ax.scatter(centroids[:, 0], centroids[:, 1], c='black', s=200, marker='x', label=label_str)
+        if ndim == 2:
+            ax.scatter(centroids[:, 0], centroids[:, 1],
+                       c='black', s=200, marker='x', label=label_str)
+        else:
+            ax.scatter(centroids[:, 0], centroids[:, 1], centroids[:, 2],
+                       c='black', s=200, marker='x', label=label_str)
 
         if show_cc_labels:
             ax.legend(loc='upper right')

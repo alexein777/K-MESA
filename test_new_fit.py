@@ -1,5 +1,5 @@
 import numpy as np
-from clustering.kmesar import KMESA
+from clustering.kmesa import KMESA
 from sklearn.datasets import make_blobs
 import matplotlib.pyplot as plt
 

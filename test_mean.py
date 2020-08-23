@@ -1,5 +1,5 @@
 import numpy as np
-from clustering.kmesar import *
+from clustering.kmesa import *
 import matplotlib.pyplot as plt
 
 if __name__ == '__main__':
